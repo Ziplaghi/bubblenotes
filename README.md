@@ -1,2 +1,2 @@
-# bubblenotes.html
+# index.html
 html공유용
