@@ -1,0 +1,2043 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Bubble Note - UI Fixed</title>
+    <style>
+        :root {
+            --btn-border: rgba(255, 255, 255, 0.5);
+            --btn-symbol: rgba(255, 255, 255, 0.2);
+            --bg-color-val: #1a1a1a;
+            --hl-color: #ffeb3b;
+        }
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body, html { width: 100%; height: 100%; overflow: hidden; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; user-select: none; touch-action: none; }
+        
+        /* 브라우저 창 좌측에 항상 고정되도록 설정 */
+        #app-container { position: relative; width: 100vw; height: 100vh; max-width: 100vw; max-height: 100vh; margin: 0; overflow: hidden; transition: background-color 0.5s; }
+        
+        /* ====== 폴더 연동(워크스페이스) 오버레이 ====== */
+        #workspace-overlay {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(20, 20, 20, 0.9); z-index: 10000;
+            display: flex; flex-direction: column; align-items: center; justify-content: center; color: white;
+            backdrop-filter: blur(15px); text-align: center; padding: 20px;
+        }
+        #workspace-overlay h2 { font-size: 28px; margin-bottom: 10px; }
+        #workspace-overlay p { color: #ccc; margin-bottom: 5px; font-size: 15px; white-space: pre-line; }
+        .workspace-btn {
+            padding: 15px 35px; font-size: 18px; font-weight: bold; margin-top: 25px;
+            background: #4caf50; color: white; border: 2px solid rgba(255,255,255,0.2); border-radius: 12px;
+            cursor: pointer; transition: transform 0.2s, background 0.2s; box-shadow: 0 10px 20px rgba(0,0,0,0.3);
+        }
+        .workspace-btn:hover { transform: scale(1.05); background: #45a049; }
+        #reset-folder-btn {
+            margin-top: 15px; font-size: 13px; color: #ffeb3b; background: transparent; border: none; cursor: pointer; text-decoration: underline; display: none;
+        }
+
+        /* ====== 암호화(비밀번호) 오버레이 ====== */
+        #password-overlay {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(20, 20, 20, 0.95); z-index: 10500;
+            display: none; flex-direction: column; align-items: center; justify-content: center; color: white;
+            backdrop-filter: blur(15px); text-align: center; padding: 20px;
+        }
+        #password-overlay h2 { font-size: 24px; margin-bottom: 10px; color: #ffeb3b; }
+        #password-overlay p { color: #ccc; margin-bottom: 20px; font-size: 14px; max-width: 360px; line-height: 1.5; white-space: pre-line; }
+        .pw-input {
+            padding: 12px 20px; font-size: 16px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.4);
+            background: rgba(0,0,0,0.5); color: white; outline: none; margin-bottom: 12px; width: 260px; text-align: center;
+        }
+        .pw-input:focus { border-color: #ffeb3b; }
+        .pw-btn {
+            padding: 12px 30px; font-size: 16px; font-weight: bold; background: #4caf50; color: white;
+            border: none; border-radius: 8px; cursor: pointer; transition: background 0.2s; margin-top: 5px; width: 260px;
+        }
+        .pw-btn:hover { background: #45a049; }
+        .pw-sub-btn {
+            margin-top: 15px; font-size: 13px; color: #aaa; background: transparent;
+            border: none; cursor: pointer; text-decoration: underline;
+        }
+        .pw-sub-btn:hover { color: #fff; }
+        #pw-error { color: #ff4d4d; font-size: 13px; margin-top: 10px; display: none; font-weight: bold; }
+
+        /* ====== 동기화(가져오기/내보내기) 모달 ====== */
+        #sync-modal {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(20, 20, 20, 0.92); z-index: 10200;
+            display: none; flex-direction: column; align-items: center; justify-content: center;
+            color: white; backdrop-filter: blur(15px); text-align: center; padding: 20px;
+        }
+        .sync-card {
+            background: #2a2a2a; border: 1px solid rgba(255,255,255,0.2); border-radius: 16px;
+            padding: 24px; width: 100%; max-width: 340px; display: flex; flex-direction: column; gap: 12px;
+        }
+        .sync-card h3 { font-size: 18px; color: #ffeb3b; margin-bottom: 4px; }
+        .sync-card p { font-size: 13px; color: #ccc; line-height: 1.4; margin-bottom: 8px; }
+        .sync-action-btn {
+            padding: 12px; border-radius: 10px; border: 1px solid rgba(255,255,255,0.25);
+            background: #383838; color: white; font-size: 14px; font-weight: bold; cursor: pointer;
+        }
+        .sync-action-btn.primary { background: #4caf50; border: none; }
+
+        /* 드래그 상태 툴팁 */
+        #detach-tooltip, #attach-tooltip {
+            display: none; position: fixed; padding: 6px 12px; border-radius: 8px; font-weight: bold; font-size: 14px; pointer-events: none; z-index: 9999; box-shadow: 0 4px 15px rgba(0,0,0,0.5); background: rgba(0,0,0,0.8);
+            transform: translate(-50%, -50%);
+        }
+        #detach-tooltip { border: 2px solid #ff4d4d; color: #ff4d4d; }
+        #attach-tooltip { border: 2px solid #4caf50; color: #4caf50; }
+
+        /* 상단 검색어 입력 폼 및 잠금/동기화 버튼 */
+        .search-wrapper { position: absolute; top: 30px; left: 30px; z-index: 2500; display: flex; align-items: center; }
+        .search-input-container { position: relative; display: flex; align-items: center; }
+        .search-input { padding: 12px 35px 12px 20px; border-radius: 30px; border: 1px solid rgba(255,255,255,0.4); background: rgba(0,0,0,0.3); color: #fff; outline: none; font-size: 15px; width: 230px; backdrop-filter: blur(5px); }
+        .search-clear { position: absolute; right: 12px; font-size: 20px; font-weight: bold; color: rgba(255,255,255,0.5); cursor: pointer; display: none; transition: color 0.2s; line-height: 1; }
+        .search-clear:hover { color: #fff; }
+
+        #lock-app-btn, #sync-io-btn {
+            margin-left: 8px; width: 42px; height: 42px; border-radius: 50%;
+            border: 1px solid rgba(255,255,255,0.4); background: rgba(0,0,0,0.3);
+            color: white; font-size: 16px; cursor: pointer; backdrop-filter: blur(5px);
+            display: flex; align-items: center; justify-content: center; transition: background 0.2s, transform 0.1s; flex-shrink: 0;
+        }
+        #lock-app-btn:hover, #sync-io-btn:hover { background: rgba(255,255,255,0.15); transform: scale(1.05); }
+        #sync-io-btn { display: none; }
+
+        /* ====== 하단 4개 도크 아이콘 정렬 ====== */
+        .dock-icon {
+            position: absolute; bottom: 30px; width: 50px; height: 50px;
+            border-radius: 50%; z-index: 2500; cursor: pointer;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.4);
+        }
+        #bg-color-dock { left: 30px; }
+        #hl-color-dock { left: 95px; }
+
+        .dock-icon input[type="color"] {
+            position: absolute; width: 200%; height: 200%; top: -50%; left: -50%;
+            opacity: 0; cursor: pointer; z-index: 2;
+        }
+        
+        .bg-icon-visual {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            border-radius: 50%; box-sizing: border-box; pointer-events: none;
+            border: 5px solid #222;
+            background-color: var(--bg-color-val);
+            box-shadow: inset 0 0 0 1px #000;
+        }
+        .hl-icon-visual {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            border-radius: 50%; box-sizing: border-box; pointer-events: none;
+            border: 10px solid var(--hl-color);
+            background-color: #fff;
+            box-shadow: inset 0 0 0 1px #000;
+        }
+
+        /* ====== 독립된 검색 결과 창 ====== */
+        #search-result-window {
+            position: absolute; bottom: 30px; left: 330px;
+            background: rgba(35, 35, 35, 0.9); border: 2px solid var(--btn-border); backdrop-filter: blur(15px); z-index: 2000;
+            overflow: hidden; transform-origin: bottom left;
+            transition: width 0.5s cubic-bezier(0.25, 1, 0.5, 1), height 0.5s cubic-bezier(0.25, 1, 0.5, 1), 
+                        transform 0.5s cubic-bezier(0.25, 1, 0.5, 1), opacity 0.4s, border-radius 0.5s, left 0.5s cubic-bezier(0.25, 1, 0.5, 1);
+            box-shadow: 0 10px 40px rgba(0,0,0,0.6);
+        }
+        #search-result-window.state-hidden { width: 0; height: 0; opacity: 0; transform: scale(0); pointer-events: none; border: none; }
+        #search-result-window.state-expanded { 
+            width: 1500px; height: 2000px; 
+            max-width: calc(100% - 360px); max-height: calc(100% - 150px); 
+            border-radius: 20px; opacity: 1; transform: scale(1); pointer-events: auto; 
+            left: 330px; top: auto;
+        }
+        #search-result-window.state-collapsed { 
+            width: 50px; height: 50px; border-radius: 50%; opacity: 1; transform: scale(1); pointer-events: auto; cursor: pointer; 
+            left: 225px; bottom: 30px; top: auto;
+        }
+        #search-result-content { display: flex; flex-wrap: wrap; gap: 25px; padding: 25px; align-content: flex-start; overflow-y: auto; width: 100%; height: 100%; transition: opacity 0.3s; }
+        #search-result-window.state-collapsed #search-result-content, #search-result-window.state-hidden #search-result-content { opacity: 0; pointer-events: none; }
+        #search-collapsed-icon { display: none; width: 100%; height: 100%; align-items: center; justify-content: center; font-size: 24px; color: white; }
+        #search-result-window.state-collapsed #search-collapsed-icon { display: flex; }
+
+        /* ====== 좌하단 즐겨찾기 창 ====== */
+        #favorite-window {
+            position: absolute; bottom: 30px; left: 330px;
+            background: rgba(35, 35, 35, 0.9); border: 2px solid var(--btn-border); backdrop-filter: blur(15px); z-index: 2000;
+            overflow: hidden; transform-origin: bottom left;
+            transition: width 0.5s cubic-bezier(0.25, 1, 0.5, 1), height 0.5s cubic-bezier(0.25, 1, 0.5, 1), 
+                        transform 0.5s cubic-bezier(0.25, 1, 0.5, 1), opacity 0.4s, border-radius 0.5s, left 0.5s cubic-bezier(0.25, 1, 0.5, 1);
+            box-shadow: 0 10px 40px rgba(0,0,0,0.6);
+        }
+        #favorite-window.state-expanded { 
+            width: 1500px; height: 2000px; 
+            max-width: calc(100% - 360px); max-height: calc(100% - 150px); 
+            border-radius: 20px; opacity: 1; transform: scale(1); pointer-events: auto; 
+            left: 330px; top: auto;
+        }
+        #favorite-window.state-collapsed { width: 50px; height: 50px; border-radius: 50%; opacity: 1; transform: scale(1); pointer-events: auto; cursor: pointer; left: 160px; bottom: 30px; }
+        #favorite-content { display: flex; flex-wrap: wrap; gap: 25px; padding: 25px; align-content: flex-start; overflow-y: auto; width: 100%; height: 100%; transition: opacity 0.3s; }
+        #favorite-window.state-collapsed #favorite-content { opacity: 0; pointer-events: none; }
+        #favorite-collapsed-icon { display: none; width: 100%; height: 100%; align-items: center; justify-content: center; font-size: 26px; color: #ffeb3b; }
+        #favorite-window.state-collapsed #favorite-collapsed-icon { display: flex; text-shadow: 0 2px 10px rgba(0,0,0,0.5); }
+
+        /* 검색 결과 버블 아이템 */
+        .search-result-bubble { width: 120px; height: 120px; border-radius: 50%; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; cursor: pointer; box-shadow: 0 10px 30px rgba(0,0,0,0.2); transition: transform 0.1s; position: relative; flex-shrink: 0; }
+        .search-result-bubble:hover { transform: scale(1.05); }
+        .search-result-bubble .bubble-title { font-size: 14px; font-weight: 600; max-width: 80%; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; pointer-events: none; color: #333; z-index: 2; }
+        .search-result-bubble .bubble-meta { font-size: 10px; color: #666; background: rgba(0,0,0,0.1); padding: 2px 6px; border-radius: 4px; margin-top: 5px; pointer-events: none; z-index: 2; }
+
+        /* 좌측 폴더 트리 뷰 */
+        #mobile-tree-toggle { display: none; position: absolute; top: 90px; left: 15px; width: 45px; height: 45px; border-radius: 50%; background: rgba(0,0,0,0.4); color: white; border: 1px solid rgba(255,255,255,0.3); align-items: center; justify-content: center; font-size: 20px; cursor: pointer; z-index: 3001; backdrop-filter: blur(5px); }
+        #tree-view { position: absolute; top: 90px; left: 30px; width: 280px; bottom: 120px; overflow-y: auto; color: #fff; font-size: 14px; z-index: 3000; padding: 10px; background: rgba(0,0,0,0.3); border-radius: 12px; backdrop-filter: blur(8px); border: 1px solid rgba(255,255,255,0.1); transition: left 0.3s cubic-bezier(0.25, 1, 0.5, 1); }
+        #tree-view ul { list-style: none; padding-left: 18px; margin: 4px 0; } #tree-view > ul { padding-left: 0; }
+        .tree-item { position: relative; display: flex; align-items: center; padding: 6px; cursor: pointer; border-radius: 6px; transition: background 0.2s; }
+        .tree-item:active { cursor: pointer; } .tree-item:hover { background: rgba(255,255,255,0.15); }
+        .tree-active { background: rgba(255,255,255,0.3) !important; font-weight: bold; border-left: 3px solid #fff; }
+        .tree-drag-over { background: rgba(76, 175, 80, 0.4) !important; border: 1px dashed #4caf50; }
+        /* 순서 변경 시 위/아래 얇은 가로선 표시 효과 */
+        .tree-reorder-top { box-shadow: inset 0 2px 0 0 #ffeb3b !important; border-top-left-radius: 0 !important; border-top-right-radius: 0 !important; }
+        .tree-reorder-bottom { box-shadow: inset 0 -2px 0 0 #ffeb3b !important; border-bottom-left-radius: 0 !important; border-bottom-right-radius: 0 !important; }
+
+        .tree-toggle { display: inline-flex; justify-content: center; align-items: center; width: 18px; height: 18px; border: 1px solid rgba(255,255,255,0.6); margin-right: 8px; border-radius: 4px; font-size: 12px; line-height: 1; font-weight: bold; cursor: pointer; }
+        .tree-spacer { width: 18px; margin-right: 8px; } .tree-label { flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: flex; align-items: center; gap: 6px; }
+        
+        .tree-reorder-btn { display: none; margin-left: auto; color: rgba(255,255,255,0.6); font-weight: bold; cursor: pointer; padding: 0 4px; border-radius: 4px; font-size: 15px; }
+        .tree-delete-btn { display: none; margin-left: 5px; color: rgba(255,255,255,0.5); font-weight: bold; cursor: pointer; padding: 0 4px; border-radius: 4px; }
+        .tree-item:hover .tree-reorder-btn, .tree-item:hover .tree-delete-btn { display: block; } 
+        .tree-reorder-btn:hover { color: #fff; background: rgba(255,255,255,0.3); }
+        .tree-reorder-btn:active { cursor: pointer; }
+        .tree-delete-btn:hover { color: #fff; background: rgba(255,77,77,0.8); }
+
+        /* 설정 및 컨트롤 버튼 (우측 하단 & 에디터 내부) */
+        .color-picker { width: 30px; height: 30px; border: none; border-radius: 50%; cursor: pointer; background: transparent; padding: 0; flex-shrink: 0; outline: none; }
+        .color-picker::-webkit-color-swatch-wrapper { padding: 0; }
+        .color-picker::-webkit-color-swatch { border: 2px solid #999; border-radius: 50%; }
+        .color-picker::-moz-color-swatch { border: 2px solid #999; border-radius: 50%; }
+
+        .action-buttons { position: absolute; bottom: 30px; right: 30px; display: flex; gap: 15px; z-index: 1000; }
+        .action-btn { width: 60px; height: 60px; border: 2px solid var(--btn-border); border-radius: 12px; background: transparent; display: flex; flex-direction: column; align-items: center; justify-content: center; cursor: pointer; transition: transform 0.1s; color: var(--btn-symbol); }
+        .action-btn:active { transform: scale(0.95); } .action-btn span { font-size: 24px; font-weight: 300; line-height: 1; } .action-btn small { font-size: 10px; margin-top: 2px; }
+
+        /* ===== 아이템 노드 & 버블 ===== */
+        .item-node {
+            position: absolute; display: flex; flex-direction: column; 
+            transition: left 0.5s cubic-bezier(0.25, 1, 0.5, 1), top 0.5s cubic-bezier(0.25, 1, 0.5, 1), 
+                        width 0.5s cubic-bezier(0.25, 1, 0.5, 1), height 0.5s cubic-bezier(0.25, 1, 0.5, 1), 
+                        border-radius 0.5s cubic-bezier(0.25, 1, 0.5, 1), background-color 0.3s,
+                        opacity 0.5s ease, transform 0.5s cubic-bezier(0.25, 1, 0.5, 1), box-shadow 0.3s;
+            transform: translate(-50%, -50%) scale(1); opacity: 1;
+        }
+        .item-node.animating-out, .item-node.animating-in { opacity: 0 !important; transform: translate(-50%, -50%) scale(0) !important; }
+        .semi-transparent { opacity: 0.25 !important; }
+
+        .item-node.bubble { width: 120px; height: 120px; border-radius: 50%; align-items: center; justify-content: center; text-align: center; cursor: pointer; z-index: 10; }
+        .item-node.bubble:active { cursor: pointer; }
+        .item-node.bubble .bubble-title { font-size: 14px; font-weight: 600; max-width: 80%; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; pointer-events: none; color: #333; z-index: 2; }
+        .item-node.bubble .bubble-meta { font-size: 10px; color: #666; background: rgba(0,0,0,0.1); padding: 2px 6px; border-radius: 4px; margin-top: 5px; pointer-events: none; z-index: 2; }
+        .item-node.bubble .editor-ui { display: none; }
+
+        /* 그룹 버블 - 8각형 */
+        .item-node.bubble.type-group, .search-result-bubble.type-group { width: 132px !important; height: 132px !important; border-radius: 0 !important; background-color: transparent !important; border: none !important; box-shadow: none !important; }
+        .item-node.bubble.type-group::before, .search-result-bubble.type-group::before { content: ''; position: absolute; top: 0; left: 0; right: 0; bottom: 0; background-color: var(--border-color); clip-path: polygon(29.3% 0%, 70.7% 0%, 100% 29.3%, 100% 70.7%, 70.7% 100%, 29.3% 100%, 0% 70.7%, 0% 29.3%); z-index: -2; transition: all 0.3s; filter: drop-shadow(0 10px 15px rgba(0,0,0,0.2)); }
+        .item-node.bubble.type-group.search-match::before, .search-result-bubble.type-group.search-match::before { top: -5px; left: -5px; right: -5px; bottom: -5px; background-color: var(--search-color) !important; filter: drop-shadow(0 10px 20px rgba(0,0,0,0.4)); }
+        .item-node.bubble.type-group::after, .search-result-bubble.type-group::after { content: ''; position: absolute; top: 3px; left: 3px; right: 3px; bottom: 3px; background-color: var(--bg-color); clip-path: polygon(29.3% 0%, 70.7% 0%, 100% 29.3%, 100% 70.7%, 70.7% 100%, 29.3% 100%, 0% 70.7%, 0% 29.3%); z-index: -1; transition: background-color 0.3s; }
+
+        /* ====== 메모창 에디터 (폭 750px / 그룹창 550px 컴팩트 분리) ====== */
+        .item-node.editor { height: 500px; border-radius: 20px; cursor: default; z-index: 500; padding: 20px; }
+        .item-node.editor.type-note { width: 750px; }
+        .item-node.editor.type-group { width: 550px; height: auto !important; padding: 20px 20px 15px 20px; }
+        .item-node.editor.type-group .editor-ui { height: auto; }
+        .item-node.editor.type-group .editor-controls { margin-bottom: 0; }
+        .item-node.editor.type-group .editor-body { display: none !important; }
+        
+        .item-node.editor .bubble-title, .item-node.editor .bubble-meta { display: none; }
+        .item-node.editor .editor-ui { display: flex; flex-direction: column; width: 100%; height: 100%; position: relative; padding-top: 15px; }
+        
+        .editor-drag-handle { position: absolute; top: -20px; left: -20px; right: -20px; height: 35px; background: rgba(0,0,0,0.05); border-radius: 20px 20px 0 0; display: flex; justify-content: center; align-items: center; cursor: pointer; }
+        .editor-drag-handle:active { cursor: pointer; }
+        .drag-bar { width: 50px; height: 5px; background: rgba(0,0,0,0.2); border-radius: 3px; }
+        
+        .editor-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
+        .editor-controls { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 10px; padding-right: 65px; }
+        
+        .tags-wrapper { display: flex; align-items: center; gap: 5px; flex-wrap: wrap; background: rgba(255,255,255,0.4); padding: 4px 8px; border-radius: 8px; border: 1px solid #ddd; min-width: 120px; max-height: 60px; overflow-y: auto; }
+        .chips-container { display: flex; gap: 4px; flex-wrap: wrap; }
+        .tag-chip { background: rgba(0,0,0,0.1); color: #333; padding: 2px 6px; border-radius: 4px; font-size: 12px; display: flex; align-items: center; gap: 4px; border: 1px solid rgba(0,0,0,0.2); }
+        .tag-chip-del { cursor: pointer; font-weight: bold; color: #ff4d4d; }
+        .tag-input { border: none; background: transparent; outline: none; font-size: 13px; width: 80px; color: #333; }
+        
+        .title-input { padding: 8px 12px; border: 1px solid #ddd; border-radius: 8px; font-size: 14px; background: rgba(255,255,255,0.5); outline: none; flex: 1; font-weight: bold; }
+        
+        .appearance-controls { display: flex; align-items: center; gap: 5px; font-size: 12px; color: #333; background: rgba(255,255,255,0.4); padding: 5px 10px; border-radius: 8px; }
+        .opacity-slider { width: 50px; cursor: pointer; }
+        
+        .btn-favorite.inline-fav { position: relative; background: transparent; border: none; font-size: 20px; cursor: pointer; color: rgba(0,0,0,0.3); margin-left: 8px; transition: transform 0.2s, color 0.2s; display: flex; align-items: center; justify-content: center; padding: 0; line-height: 1; }
+        .btn-favorite.inline-fav:hover { transform: scale(1.2); color: rgba(0,0,0,0.6); }
+        .btn-favorite.inline-fav.active { color: #ffeb3b; text-shadow: 0 0 5px rgba(0,0,0,0.3); }
+
+        .btn-minimize { position: absolute; right: 36px; top: 0; background: #4caf50; color: white; border: none; width: 28px; height: 28px; border-radius: 50%; cursor: pointer; font-weight: bold; display: flex; align-items: center; justify-content: center; z-index: 10; }
+        .btn-close { position: absolute; right: 0; top: 0; background: #ff4d4d; color: white; border: none; width: 28px; height: 28px; border-radius: 50%; cursor: pointer; font-weight: bold; display: flex; align-items: center; justify-content: center; z-index: 10; }
+        .btn-parent { background: #4caf50; color: white; border: none; padding: 6px 12px; border-radius: 8px; cursor: pointer; font-size: 12px; }
+        
+        .img-upload-label { cursor: pointer; font-size: 12px; background: rgba(0,0,0,0.1); padding: 6px 10px; border-radius: 8px; border: 1px solid #ddd; font-weight: bold; color: #333; transition: background 0.2s; display: inline-flex; align-items: center; }
+        .img-upload-label:hover { background: rgba(0,0,0,0.2); }
+
+        .editor-body { flex: 1; display: flex; flex-direction: column; overflow-y: auto; overflow-x: hidden; padding: 10px; background: rgba(255,255,255,0.3); border-radius: 12px; cursor: text; }
+        .editor-textarea { flex: 1; width: 100%; min-height: 100%; outline: none; font-size: 16px; font-family: inherit; line-height: 1.6; white-space: pre-wrap; word-break: break-word; user-select: text; color: #333; }
+        .editor-textarea img { max-width: 100%; height: auto; border-radius: 6px; display: inline-block; vertical-align: middle; margin: 5px 0; box-shadow: 0 2px 10px rgba(0,0,0,0.1); cursor: pointer; border: 2px solid transparent; }
+        .editor-textarea img:hover { border-color: #4caf50; }
+
+        .drag-over { border: 4px solid #4caf50 !important; transform: translate(-50%, -50%) scale(1.1) !important; }
+        #backdrop { position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 1; display: none; }
+        #backdrop.active { display: block; }
+        .clip-mark { font-size: 12px; margin-left: 4px; }
+
+        #image-resizer-overlay { display: none; position: absolute; z-index: 1000; border: 2px dashed #4caf50; pointer-events: none; }
+        #image-resizer-handle { position: absolute; right: -8px; bottom: -8px; width: 16px; height: 16px; background: #4caf50; border: 2px solid #fff; border-radius: 50%; cursor: nwse-resize; pointer-events: all; }
+        #image-resizer-delete { position: absolute; right: -12px; top: -12px; width: 24px; height: 24px; background: #ff4d4d; color: white; border: 2px solid #fff; border-radius: 50%; cursor: pointer; pointer-events: all; display: flex; align-items: center; justify-content: center; font-weight: bold; font-size: 14px; box-shadow: 0 2px 5px rgba(0,0,0,0.3); }
+        
+        /* ====== 실제 스마트폰(터치 기반 모바일) 전용 레이아웃 ====== */
+        @media (max-width: 768px) and (pointer: coarse) {
+            #app-container { width: 100vw; height: 100vh; height: 100dvh; }
+            #mobile-tree-toggle { display: flex; top: 14px; left: 12px; width: 40px; height: 40px; font-size: 18px; z-index: 3501; }
+            .search-wrapper { top: 14px; left: 60px; right: 12px; width: auto; z-index: 3500; display: flex; align-items: center; }
+            .search-input-container { flex: 1; min-width: 0; }
+            .search-input { width: 100%; height: 40px; padding: 8px 30px 8px 14px; font-size: 14px; }
+            #lock-app-btn, #sync-io-btn { width: 40px; height: 40px; margin-left: 6px; flex-shrink: 0; }
+            #sync-io-btn { display: flex; }
+
+            #tree-view { top: 64px; left: -310px; width: 270px; bottom: calc(80px + env(safe-area-inset-bottom, 0px)); background: rgba(20, 20, 20, 0.92); z-index: 3600; box-shadow: 5px 0 25px rgba(0,0,0,0.6); }
+            #tree-view.open { left: 12px; }
+            .tree-reorder-btn, .tree-delete-btn { display: block !important; padding: 4px 8px; font-size: 16px; }
+
+            .item-node.bubble { width: 96px; height: 96px; }
+            .item-node.bubble .bubble-title { font-size: 12px; max-width: 85%; }
+            .item-node.bubble .bubble-meta { font-size: 9px; margin-top: 3px; }
+            .item-node.bubble.type-group, .search-result-bubble.type-group { width: 106px !important; height: 106px !important; }
+
+            .item-node.editor.type-note { width: 94vw !important; height: 76dvh !important; max-height: calc(100dvh - 110px) !important; padding: 14px; z-index: 4000; }
+            .item-node.editor.type-group { width: 92vw !important; height: auto !important; padding: 14px; z-index: 3200; }
+
+            .editor-controls { gap: 6px; justify-content: flex-start; margin-bottom: 8px; padding-right: 60px; }
+            .tags-wrapper { width: 100%; max-height: 48px; }
+            .title-input { width: 100%; flex: none; padding: 6px 10px; }
+            .appearance-controls { width: 100%; justify-content: space-between; padding: 6px 8px; }
+            .editor-textarea { font-size: 15px; }
+
+            .dock-icon { width: 42px; height: 42px; bottom: calc(14px + env(safe-area-inset-bottom, 0px)); }
+            #bg-color-dock { left: 12px; }
+            #hl-color-dock { left: 62px; }
+            #favorite-window.state-collapsed { width: 42px !important; height: 42px !important; left: 112px !important; bottom: calc(14px + env(safe-area-inset-bottom, 0px)) !important; }
+            #favorite-collapsed-icon { font-size: 20px; }
+            #search-result-window.state-collapsed { width: 42px !important; height: 42px !important; left: 162px !important; bottom: calc(14px + env(safe-area-inset-bottom, 0px)) !important; top: auto !important; }
+            #search-collapsed-icon { font-size: 18px; }
+
+            #search-result-window.state-expanded, #favorite-window.state-expanded {
+                width: 94vw !important; height: 72dvh !important; max-width: none !important; max-height: none !important;
+                left: 3vw !important; top: 64px !important; bottom: auto !important; z-index: 3800;
+            }
+
+            .action-buttons { bottom: calc(14px + env(safe-area-inset-bottom, 0px)); right: 12px; gap: 8px; z-index: 2600; }
+            .action-btn { width: 46px; height: 46px; border-radius: 10px; }
+            .action-btn span { font-size: 18px; }
+            .action-btn small { font-size: 9px; margin-top: 1px; }
+        }
+    </style>
+</head>
+<body>
+    <div id="workspace-overlay">
+        <h2 id="workspace-title">저장 폴더 연결</h2>
+        <p id="workspace-desc">OneDrive 또는 iCloud Drive 내에 미리 생성한 폴더를 선택해주세요.</p>
+        <button id="workspace-btn" class="workspace-btn" onclick="openWorkspace()">폴더 선택하기</button>
+        <button id="reset-folder-btn" onclick="resetFolder()">다른 폴더로 새로 연결하기</button>
+    </div>
+
+    <div id="password-overlay">
+        <h2 id="pw-title">보안 잠금 해제</h2>
+        <p id="pw-desc">데이터를 복호화하기 위해 마스터 비밀번호를 입력해주세요.</p>
+        <input type="password" id="pw-input-current" class="pw-input" placeholder="현재 비밀번호" style="display:none;" />
+        <input type="password" id="pw-input" class="pw-input" placeholder="비밀번호 입력" />
+        <input type="password" id="pw-input-confirm" class="pw-input" placeholder="비밀번호 확인 (재입력)" style="display:none;" />
+        <button id="pw-btn" class="pw-btn">확인</button>
+        <div id="pw-error"></div>
+        <button id="pw-change-mode-btn" class="pw-sub-btn" style="display:none;">마스터 비밀번호 변경하기</button>
+        <!-- 데이터 파일 바로 불러오기 버튼 추가 -->
+        <label class="pw-sub-btn" style="margin-top:15px; color:#4caf50; cursor:pointer; display:inline-block;">
+            📥 PC의 data.json 파일 바로 불러오기
+            <input type="file" accept=".json,application/json" style="display:none;" onchange="importBackupFiles(event)" />
+        </label>
+    </div>
+
+    <div id="sync-modal">
+        <div class="sync-card">
+            <h3>데이터 동기화 (PC ↔ 스마트폰)</h3>
+            <p>OneDrive / iCloud 폴더의 암호화된 파일(data.json 및 이미지)을 불러오거나 내보낼 수 있습니다.</p>
+            <button class="sync-action-btn primary" onclick="exportBackupFile()">📤 현재 데이터 파일로 내보내기</button>
+            <label class="sync-action-btn" style="display:block; cursor:pointer;">
+                📥 파일 불러오기 (data.json / 백업파일)
+                <input type="file" id="sync-import-input" multiple accept=".json,image/*" style="display:none;" onchange="importBackupFiles(event)" />
+            </label>
+            <button class="sync-action-btn" style="background:transparent; border:none; color:#aaa;" onclick="closeSyncModal()">닫기</button>
+        </div>
+    </div>
+
+    <div id="app-container" style="background-color: #1a1a1a;">
+        <div id="backdrop"></div>
+        <div id="detach-tooltip">해제</div>
+        <div id="attach-tooltip">그룹</div>
+        
+        <div id="image-resizer-overlay">
+            <div id="image-resizer-delete" title="이미지 삭제">X</div>
+            <div id="image-resizer-handle"></div>
+        </div>
+        
+        <div class="search-wrapper">
+            <div class="search-input-container">
+                <input type="text" id="search-input" class="search-input" placeholder="키워드 또는 태그 검색...">
+                <span id="search-clear" class="search-clear" title="검색어 지우기">&times;</span>
+            </div>
+            <button id="lock-app-btn" title="즉시 화면 잠금" onclick="lockApp()">🔒</button>
+            <button id="sync-io-btn" title="데이터 파일 가져오기/내보내기" onclick="openSyncModal()">📂</button>
+        </div>
+
+        <button id="mobile-tree-toggle" title="트리 뷰 열기/닫기">📁</button>
+
+        <div id="tree-view"></div>
+
+        <!-- 하단 4개 도크 아이콘 -->
+        <div id="bg-color-dock" class="dock-icon" title="배경색 변경">
+            <input type="color" id="bg-color" value="#1a1a1a">
+            <div class="bg-icon-visual"></div>
+        </div>
+        
+        <div id="hl-color-dock" class="dock-icon" title="하이라이트 색상 변경">
+            <input type="color" id="search-color" value="#ffeb3b">
+            <div class="hl-icon-visual"></div>
+        </div>
+
+        <div id="favorite-window" class="state-collapsed">
+            <div id="favorite-collapsed-icon" title="즐겨찾기 목록 열기">★</div>
+            <div id="favorite-content"></div>
+        </div>
+
+        <div id="search-result-window" class="state-hidden">
+            <div id="search-collapsed-icon" title="검색 결과 열기">🔍</div>
+            <div id="search-result-content"></div>
+        </div>
+
+        <div class="action-buttons">
+            <button class="action-btn" id="btn-add-note"><span>+</span><small>메모</small></button>
+            <button class="action-btn" id="btn-add-group"><span>+</span><small>그룹</small></button>
+        </div>
+        
+        <div id="nodes-container"></div>
+    </div>
+
+    <script>
+        let appData = { bgColor: '#1a1a1a', searchHighlightColor: '#ffeb3b', items: [] };
+        let dirHandle = null; 
+        
+        let activeItemId = null; 
+        let currentParentId = null; 
+        let searchQuery = '';
+        let searchWindowState = 'hidden'; 
+        let favoriteWindowState = 'collapsed';
+        
+        window.__dragHandled = false; 
+        window.__dragSource = null; 
+        window.__dragStartX = null;
+        window.__dragStartY = null;
+        window.__draggedItem = null;
+        window.__dragMode = 'group'; 
+        window.__reorderPosition = null;
+
+        const container = document.getElementById('nodes-container');
+        const appContainer = document.getElementById('app-container');
+        const backdrop = document.getElementById('backdrop');
+        const treeToggleBtn = document.getElementById('mobile-tree-toggle');
+        const treeView = document.getElementById('tree-view');
+        treeToggleBtn.addEventListener('click', () => { treeView.classList.toggle('open'); });
+        
+        document.addEventListener('mouseup', () => { window.__dragMode = 'group'; });
+        document.addEventListener('touchend', () => { window.__dragMode = 'group'; }, {passive: true});
+
+        function isMobileEnv() {
+            return window.matchMedia('(max-width: 768px) and (pointer: coarse)').matches;
+        }
+
+        function hexToRgba(hex, opacity) {
+            if (!hex || typeof hex !== 'string' || !hex.startsWith('#')) hex = '#ffffff';
+            let r = parseInt(hex.slice(1, 3), 16) || 255;
+            let g = parseInt(hex.slice(3, 5), 16) || 255;
+            let b = parseInt(hex.slice(5, 7), 16) || 255;
+            return `rgba(${r}, ${g}, ${b}, ${opacity ?? 1})`;
+        }
+        function generateId() { return 'id_' + Math.random().toString(36).substr(2, 9); }
+        function stripHtml(html) { let tmp = document.createElement("DIV"); tmp.innerHTML = html; return tmp.textContent || tmp.innerText || ""; }
+
+        const DB_NAME = 'BubbleNoteDB';
+        function initDB() {
+            return new Promise((resolve, reject) => {
+                const req = indexedDB.open(DB_NAME, 1);
+                req.onupgradeneeded = (e) => { e.target.result.createObjectStore('handles'); };
+                req.onsuccess = () => resolve(req.result);
+                req.onerror = () => reject(req.error);
+            });
+        }
+        async function saveHandleToDB(handle) {
+            const db = await initDB();
+            const tx = db.transaction('handles', 'readwrite');
+            tx.objectStore('handles').put(handle, 'workspaceHandle');
+            return new Promise(resolve => tx.oncomplete = resolve);
+        }
+        async function getHandleFromDB() {
+            const db = await initDB();
+            return new Promise((resolve, reject) => {
+                const req = db.transaction('handles').objectStore('handles').get('workspaceHandle');
+                req.onsuccess = () => resolve(req.result);
+                req.onerror = () => reject(req.error);
+            });
+        }
+        async function clearHandleFromDB() {
+            const db = await initDB();
+            const tx = db.transaction('handles', 'readwrite');
+            tx.objectStore('handles').delete('workspaceHandle');
+            return new Promise(resolve => tx.oncomplete = resolve);
+        }
+
+        async function verifyPermission(fileHandle, readWrite) {
+            const options = { mode: readWrite ? 'readwrite' : 'read' };
+            if ((await fileHandle.queryPermission(options)) === 'granted') return true;
+            if ((await fileHandle.requestPermission(options)) === 'granted') return true;
+            return false;
+        }
+
+        // ====== [모바일 호환: IndexedDB 기반 가상 디렉터리 핸들] ======
+        const MOBILE_FS_STORE = 'mobile_files';
+        function initMobileFS() {
+            return new Promise((resolve, reject) => {
+                const req = indexedDB.open('BubbleNoteMobileFS', 1);
+                req.onupgradeneeded = (e) => {
+                    if (!e.target.result.objectStoreNames.contains(MOBILE_FS_STORE)) {
+                        e.target.result.createObjectStore(MOBILE_FS_STORE);
+                    }
+                };
+                req.onsuccess = () => resolve(req.result);
+                req.onerror = () => reject(req.error);
+            });
+        }
+
+        function createVirtualDirHandle() {
+            return {
+                isVirtual: true,
+                name: 'MobileStorage',
+                async getFileHandle(filename, options = {}) {
+                    const db = await initMobileFS();
+                    const existing = await new Promise((resolve, reject) => {
+                        const req = db.transaction(MOBILE_FS_STORE, 'readonly').objectStore(MOBILE_FS_STORE).get(filename);
+                        req.onsuccess = () => resolve(req.result);
+                        req.onerror = () => reject(req.error);
+                    });
+
+                    if (existing === undefined && !options.create) {
+                        throw new Error('FileNotFound: ' + filename);
+                    }
+
+                    return {
+                        name: filename,
+                        async getFile() {
+                            const db2 = await initMobileFS();
+                            const data = await new Promise((resolve, reject) => {
+                                const req = db2.transaction(MOBILE_FS_STORE, 'readonly').objectStore(MOBILE_FS_STORE).get(filename);
+                                req.onsuccess = () => resolve(req.result);
+                                req.onerror = () => reject(req.error);
+                            });
+                            if (data === undefined) throw new Error('FileNotFound');
+                            return new Blob([data]);
+                        },
+                        async createWritable() {
+                            let chunks = [];
+                            return {
+                                async write(data) {
+                                    if (typeof data === 'string') {
+                                        chunks.push(new TextEncoder().encode(data));
+                                    } else if (data instanceof ArrayBuffer) {
+                                        chunks.push(new Uint8Array(data));
+                                    } else if (ArrayBuffer.isView(data)) {
+                                        chunks.push(new Uint8Array(data.buffer, data.byteOffset, data.byteLength));
+                                    } else if (data instanceof Blob) {
+                                        chunks.push(new Uint8Array(await data.arrayBuffer()));
+                                    }
+                                },
+                                async close() {
+                                    let totalLen = chunks.reduce((acc, c) => acc + c.byteLength, 0);
+                                    let merged = new Uint8Array(totalLen);
+                                    let offset = 0;
+                                    for (let c of chunks) { merged.set(c, offset); offset += c.byteLength; }
+                                    const db2 = await initMobileFS();
+                                    const tx = db2.transaction(MOBILE_FS_STORE, 'readwrite');
+                                    tx.objectStore(MOBILE_FS_STORE).put(merged.buffer, filename);
+                                    return new Promise(resolve => tx.oncomplete = resolve);
+                                }
+                            };
+                        }
+                    };
+                },
+                async removeEntry(filename) {
+                    const db = await initMobileFS();
+                    const tx = db.transaction(MOBILE_FS_STORE, 'readwrite');
+                    tx.objectStore(MOBILE_FS_STORE).delete(filename);
+                    return new Promise(resolve => tx.oncomplete = resolve);
+                }
+            };
+        }
+
+        window.addEventListener('DOMContentLoaded', async () => {
+            const supportsFileSystem = ('showDirectoryPicker' in window);
+            const isMobile = isMobileEnv();
+
+            // 1. 스마트폰(갤럭시/아이폰)에서는 폴더 제한(Download 폴더 차단 등)을 피하기 위해
+            //    폴더 선택기 대신 가상 보안 스토리지 + 직접 파일 불러오기(📂) 모드로 작동
+            if (!supportsFileSystem || isMobile) {
+                dirHandle = createVirtualDirHandle();
+                document.getElementById('sync-io-btn').style.display = 'flex';
+                try {
+                    // 이전에 모바일에서 불러왔던 데이터가 있으면 첫 화면 없이 바로 비밀번호 창으로 진입
+                    await dirHandle.getFileHandle('data.json', { create: false });
+                    document.getElementById('workspace-overlay').style.display = 'none';
+                    await loadFromDisk();
+                } catch (e) {
+                    document.getElementById('workspace-title').innerText = "스마트폰 보안 노트";
+                    document.getElementById('workspace-desc').innerText = "폴더 이동 없이 상단 📂 버튼으로 다운로드 폴더나 OneDrive의 data.json을 바로 불러올 수 있습니다.";
+                    document.getElementById('workspace-btn').innerText = "바로 시작하기";
+                }
+                return;
+            }
+
+            // 2. PC 환경: '방문할 때마다 허용'으로 이미 권한이 부여된 상태라면 버튼 화면을 즉시 건너뜀
+            try {
+                const storedHandle = await getHandleFromDB();
+                if (storedHandle) {
+                    dirHandle = storedHandle;
+                    const perm = await dirHandle.queryPermission({ mode: 'readwrite' });
+                    if (perm === 'granted') {
+                        document.getElementById('workspace-overlay').style.display = 'none';
+                        await loadFromDisk();
+                        return;
+                    }
+
+                    document.getElementById('workspace-title').innerText = "이전 폴더 연결하기";
+                    document.getElementById('workspace-desc').innerText = `"${dirHandle.name}" 폴더의 접근 권한을 다시 허용해주세요.`;
+                    document.getElementById('workspace-btn').innerText = "폴더 접근 허용";
+                    document.getElementById('workspace-btn').onclick = async () => {
+                        if (await verifyPermission(dirHandle, true)) {
+                            document.getElementById('workspace-overlay').style.display = 'none';
+                            await loadFromDisk();
+                        }
+                    };
+                    document.getElementById('reset-folder-btn').style.display = 'inline-block';
+                }
+            } catch (e) { console.log("DB 확인 오류:", e); }
+        });
+
+        async function openWorkspace() {
+            if (!('showDirectoryPicker' in window) || isMobileEnv()) {
+                dirHandle = createVirtualDirHandle();
+                document.getElementById('sync-io-btn').style.display = 'flex';
+                document.getElementById('workspace-overlay').style.display = 'none';
+                await loadFromDisk();
+                return;
+            }
+            try {
+                dirHandle = await window.showDirectoryPicker({ mode: 'readwrite' });
+                await saveHandleToDB(dirHandle);
+                document.getElementById('workspace-overlay').style.display = 'none';
+                await loadFromDisk();
+            } catch (e) {
+                console.error("폴더 접근 취소 또는 오류:", e);
+            }
+        }
+
+        async function resetFolder() {
+            await clearHandleFromDB();
+            dirHandle = null;
+            document.getElementById('workspace-title').innerText = "저장 공간(폴더) 선택";
+            document.getElementById('workspace-desc').innerText = "OneDrive 또는 iCloud Drive 내에 생성한 폴더를 선택해주세요.";
+            document.getElementById('workspace-btn').innerText = "새로운 폴더 선택하기";
+            document.getElementById('workspace-btn').onclick = openWorkspace;
+            document.getElementById('reset-folder-btn').style.display = 'none';
+        }
+
+        function openSyncModal() { document.getElementById('sync-modal').style.display = 'flex'; }
+        function closeSyncModal() { document.getElementById('sync-modal').style.display = 'none'; }
+
+        async function exportBackupFile() {
+            if (!dirHandle || !sessionCryptoKey) return;
+            await flushSave();
+            try {
+                const fh = await dirHandle.getFileHandle('data.json', { create: false });
+                const file = await fh.getFile();
+                const blob = new Blob([await file.arrayBuffer()], { type: 'application/json' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = 'data.json';
+                document.body.appendChild(a);
+                a.click();
+                a.remove();
+                URL.revokeObjectURL(url);
+                closeSyncModal();
+            } catch (e) {
+                alert("내보낼 데이터가 없습니다.");
+            }
+        }
+
+        async function importBackupFiles(event) {
+            const files = Array.from(event.target.files);
+            if (!files.length || !dirHandle) return;
+
+            let hasDataJson = false;
+            for (let f of files) {
+                const targetName = f.name.endsWith('.json') ? 'data.json' : f.name;
+                if (targetName === 'data.json') hasDataJson = true;
+                const fh = await dirHandle.getFileHandle(targetName, { create: true });
+                const writable = await fh.createWritable();
+                await writable.write(await f.arrayBuffer());
+                await writable.close();
+            }
+            event.target.value = '';
+            closeSyncModal();
+
+            if (hasDataJson) {
+                sessionCryptoKey = null;
+                sessionSalt = null;
+                activeItemId = null;
+                currentParentId = null;
+                await loadFromDisk();
+            } else {
+                await processImagesForRender();
+                render();
+            }
+        }
+
+        // ====== [보안 강화: 세션 키 관리 및 비동기 저장 큐 변수] ======
+        let sessionCryptoKey = null;
+        let sessionSalt = null;
+        const PBKDF2_ITERATIONS = 600000;
+        const IMG_MAGIC = new Uint8Array([0x42, 0x4E, 0x45, 0x31]); // 'BNE1'
+
+        let saveTimeout = null;
+        let isSaving = false;
+        let savePending = false;
+        let activeBlobUrls = [];
+
+        const CryptoUtil = {
+            bufferToBase64(buffer) {
+                const bytes = new Uint8Array(buffer);
+                let binary = '';
+                const chunkSize = 0x8000;
+                for (let i = 0; i < bytes.length; i += chunkSize) {
+                    binary += String.fromCharCode.apply(null, bytes.subarray(i, i + chunkSize));
+                }
+                return btoa(binary);
+            },
+            base64ToBuffer(base64) {
+                const binaryString = atob(base64);
+                const bytes = new Uint8Array(binaryString.length);
+                for (let i = 0; i < binaryString.length; i++) {
+                    bytes[i] = binaryString.charCodeAt(i);
+                }
+                return bytes.buffer;
+            },
+            async deriveKey(password, saltBuffer, iterations = PBKDF2_ITERATIONS) {
+                const enc = new TextEncoder();
+                const keyMaterial = await crypto.subtle.importKey(
+                    "raw", enc.encode(password), { name: "PBKDF2" }, false, ["deriveKey"]
+                );
+                return crypto.subtle.deriveKey(
+                    { name: "PBKDF2", salt: saltBuffer, iterations: iterations, hash: "SHA-256" },
+                    keyMaterial,
+                    { name: "AES-GCM", length: 256 },
+                    false,
+                    ["encrypt", "decrypt"]
+                );
+            },
+            async encryptWithSessionKey(plainText) {
+                if (!sessionCryptoKey || !sessionSalt) throw new Error("Locked");
+                const iv = crypto.getRandomValues(new Uint8Array(12));
+                const enc = new TextEncoder();
+                const cipherBuffer = await crypto.subtle.encrypt(
+                    { name: "AES-GCM", iv: iv },
+                    sessionCryptoKey,
+                    enc.encode(plainText)
+                );
+                return {
+                    encrypted: true,
+                    iterations: PBKDF2_ITERATIONS,
+                    salt: this.bufferToBase64(sessionSalt),
+                    iv: this.bufferToBase64(iv),
+                    ciphertext: this.bufferToBase64(cipherBuffer)
+                };
+            },
+            async decryptWithPassword(encryptedObj, password) {
+                const salt = new Uint8Array(this.base64ToBuffer(encryptedObj.salt));
+                const iv = new Uint8Array(this.base64ToBuffer(encryptedObj.iv));
+                const cipherBuffer = this.base64ToBuffer(encryptedObj.ciphertext);
+                const iterations = encryptedObj.iterations || 100000;
+
+                const key = await this.deriveKey(password, salt, iterations);
+                try {
+                    const decBuffer = await crypto.subtle.decrypt(
+                        { name: "AES-GCM", iv: iv }, key, cipherBuffer
+                    );
+                    return {
+                        text: new TextDecoder().decode(decBuffer),
+                        key: key,
+                        salt: salt,
+                        needsUpgrade: iterations !== PBKDF2_ITERATIONS
+                    };
+                } catch (e) {
+                    throw new Error("WrongPassword");
+                }
+            },
+            async encryptBinary(arrayBuffer) {
+                if (!sessionCryptoKey) throw new Error("Locked");
+                const iv = crypto.getRandomValues(new Uint8Array(12));
+                const cipherBuffer = await crypto.subtle.encrypt(
+                    { name: "AES-GCM", iv: iv }, sessionCryptoKey, arrayBuffer
+                );
+                const cipherBytes = new Uint8Array(cipherBuffer);
+                const out = new Uint8Array(4 + 12 + cipherBytes.length);
+                out.set(IMG_MAGIC, 0);
+                out.set(iv, 4);
+                out.set(cipherBytes, 16);
+                return out.buffer;
+            },
+            isEncryptedBinary(arrayBuffer) {
+                if (arrayBuffer.byteLength < 16) return false;
+                const head = new Uint8Array(arrayBuffer, 0, 4);
+                return head[0] === 0x42 && head[1] === 0x4E && head[2] === 0x45 && head[3] === 0x31;
+            },
+            async decryptBinary(arrayBuffer) {
+                if (!sessionCryptoKey) throw new Error("Locked");
+                const iv = new Uint8Array(arrayBuffer, 4, 12);
+                const cipherBytes = new Uint8Array(arrayBuffer, 16);
+                return await crypto.subtle.decrypt(
+                    { name: "AES-GCM", iv: iv }, sessionCryptoKey, cipherBytes
+                );
+            }
+        };
+
+        async function loadFromDisk() {
+            try {
+                const fileHandle = await dirHandle.getFileHandle('data.json', { create: false });
+                const file = await fileHandle.getFile();
+                const text = await file.text();
+                const parsed = JSON.parse(text);
+
+                if (parsed.encrypted) {
+                    showPasswordPrompt("unlock", parsed);
+                } else {
+                    alert("기존 평문 데이터가 감지되었습니다. 보안을 위해 마스터 비밀번호를 설정하여 데이터를 암호화합니다.");
+                    appData = parsed;
+                    showPasswordPrompt("setup");
+                }
+            } catch (e) {
+                console.log("기존 데이터 파일이 없으므로 새로 시작합니다.");
+                appData = { bgColor: '#1a1a1a', searchHighlightColor: '#ffeb3b', items: [] };
+                showPasswordPrompt("setup");
+            }
+        }
+
+        async function lockApp() {
+            if (!dirHandle || !sessionCryptoKey) return;
+            await flushSave();
+            sessionCryptoKey = null;
+            sessionSalt = null;
+            activeItemId = null;
+            currentParentId = null;
+
+            activeBlobUrls.forEach(url => URL.revokeObjectURL(url));
+            activeBlobUrls = [];
+
+            container.innerHTML = '';
+            document.getElementById('tree-view').innerHTML = '';
+            await loadFromDisk();
+        }
+
+        function showPasswordPrompt(mode, encryptedData = null) {
+            const overlay = document.getElementById('password-overlay');
+            const inputCurrent = document.getElementById('pw-input-current');
+            const input = document.getElementById('pw-input');
+            const inputConfirm = document.getElementById('pw-input-confirm');
+            const btn = document.getElementById('pw-btn');
+            const title = document.getElementById('pw-title');
+            const desc = document.getElementById('pw-desc');
+            const error = document.getElementById('pw-error');
+            const changeModeBtn = document.getElementById('pw-change-mode-btn');
+
+            overlay.style.display = 'flex';
+            inputCurrent.value = '';
+            input.value = '';
+            inputConfirm.value = '';
+            error.style.display = 'none';
+
+            const showError = (msg) => {
+                error.innerText = msg;
+                error.style.display = 'block';
+            };
+
+            if (mode === "setup") {
+                title.innerText = "마스터 비밀번호 초기 설정";
+                desc.innerText = "노트와 첨부 이미지를 암호화할 비밀번호를 설정해주세요.\n(주의: 비밀번호 분실 시 데이터 복구가 절대 불가능합니다)";
+                inputCurrent.style.display = 'none';
+                input.placeholder = "새 비밀번호 입력 (4자 이상)";
+                inputConfirm.style.display = 'block';
+                changeModeBtn.style.display = 'none';
+                input.focus();
+            } else if (mode === "unlock") {
+                title.innerText = "보안 잠금 해제";
+                desc.innerText = "데이터를 복호화하기 위해 마스터 비밀번호를 입력해주세요.";
+                inputCurrent.style.display = 'none';
+                input.placeholder = "비밀번호 입력";
+                inputConfirm.style.display = 'none';
+                changeModeBtn.style.display = 'inline-block';
+                changeModeBtn.innerText = "마스터 비밀번호 변경하기";
+                changeModeBtn.onclick = () => showPasswordPrompt("change", encryptedData);
+                input.focus();
+            } else if (mode === "change") {
+                title.innerText = "마스터 비밀번호 변경";
+                desc.innerText = "현재 비밀번호와 새로 사용할 비밀번호를 입력해주세요.";
+                inputCurrent.style.display = 'block';
+                input.placeholder = "새 비밀번호 입력 (4자 이상)";
+                inputConfirm.style.display = 'block';
+                changeModeBtn.style.display = 'inline-block';
+                changeModeBtn.innerText = "잠금 해제로 돌아가기";
+                changeModeBtn.onclick = () => showPasswordPrompt("unlock", encryptedData);
+                inputCurrent.focus();
+            }
+
+            const handleConfirm = async () => {
+                const pw = input.value;
+                error.style.display = 'none';
+                btn.disabled = true;
+                btn.innerText = "보안 처리 중...";
+
+                try {
+                    if (mode === "setup") {
+                        if (pw.length < 4) { showError("비밀번호는 최소 4자 이상이어야 합니다."); return; }
+                        if (pw !== inputConfirm.value) { showError("비밀번호 재입력이 일치하지 않습니다."); return; }
+
+                        sessionSalt = crypto.getRandomValues(new Uint8Array(16));
+                        sessionCryptoKey = await CryptoUtil.deriveKey(pw, sessionSalt, PBKDF2_ITERATIONS);
+
+                        overlay.style.display = 'none';
+                        await completeAppLoad();
+                        await save(true);
+                    } else if (mode === "unlock") {
+                        if (!pw) return;
+                        const res = await CryptoUtil.decryptWithPassword(encryptedData, pw);
+                        appData = JSON.parse(res.text);
+
+                        if (res.needsUpgrade) {
+                            sessionSalt = crypto.getRandomValues(new Uint8Array(16));
+                            sessionCryptoKey = await CryptoUtil.deriveKey(pw, sessionSalt, PBKDF2_ITERATIONS);
+                        } else {
+                            sessionSalt = res.salt;
+                            sessionCryptoKey = res.key;
+                        }
+
+                        overlay.style.display = 'none';
+                        await completeAppLoad();
+                        if (res.needsUpgrade) await save(true);
+                    } else if (mode === "change") {
+                        const curPw = inputCurrent.value;
+                        if (!curPw || !pw) { showError("모든 입력란을 채워주세요."); return; }
+                        if (pw.length < 4) { showError("새 비밀번호는 최소 4자 이상이어야 합니다."); return; }
+                        if (pw !== inputConfirm.value) { showError("새 비밀번호 재입력이 일치하지 않습니다."); return; }
+
+                        const res = await CryptoUtil.decryptWithPassword(encryptedData, curPw);
+                        appData = JSON.parse(res.text);
+
+                        sessionCryptoKey = res.key;
+                        sessionSalt = res.salt;
+                        const newSalt = crypto.getRandomValues(new Uint8Array(16));
+                        const newKey = await CryptoUtil.deriveKey(pw, newSalt, PBKDF2_ITERATIONS);
+
+                        await reEncryptAllImages(res.key, newKey);
+
+                        sessionSalt = newSalt;
+                        sessionCryptoKey = newKey;
+                        overlay.style.display = 'none';
+                        await completeAppLoad();
+                        await save(true);
+                        alert("마스터 비밀번호가 안전하게 변경되었습니다.");
+                    }
+                } catch (err) {
+                    console.error(err);
+                    showError("비밀번호가 일치하지 않습니다.");
+                } finally {
+                    btn.disabled = false;
+                    btn.innerText = "확인";
+                }
+            };
+
+            btn.onclick = handleConfirm;
+            const onEnter = (e) => { if (e.key === 'Enter') handleConfirm(); };
+            inputCurrent.onkeydown = onEnter;
+            input.onkeydown = onEnter;
+            inputConfirm.onkeydown = onEnter;
+        }
+
+        async function completeAppLoad() {
+            if (!appData || !Array.isArray(appData.items)) {
+                appData = { bgColor: '#1a1a1a', searchHighlightColor: '#ffeb3b', items: [] };
+            }
+            appData.items.forEach((item, index) => {
+                if (!item.borderColor) item.borderColor = '#ffffff';
+                if (!item.color) item.color = '#ffffff';
+                if (typeof item.opacity !== 'number') item.opacity = 1.0;
+                if (!item.tags) item.tags = [];
+                if (typeof item.order === 'undefined') item.order = index;
+                if (typeof item.isFavorite === 'undefined') item.isFavorite = false;
+                // 이전에 잘못 계산되어 저장된 좌표 초기화
+                delete item.targetX;
+                delete item.targetY;
+            });
+
+            await processImagesForRender();
+            initUI();
+            render();
+            renderTree();
+            updateFavoriteWindow();
+        }
+
+        async function reEncryptAllImages(oldKey, newKey) {
+            const filenames = new Set();
+            appData.items.forEach(item => {
+                if (item.type === 'note' && item.content) {
+                    let tmp = document.createElement('div');
+                    tmp.innerHTML = item.content;
+                    tmp.querySelectorAll('img[data-filename]').forEach(img => {
+                        filenames.add(img.getAttribute('data-filename'));
+                    });
+                }
+            });
+
+            for (let filename of filenames) {
+                try {
+                    const fh = await dirHandle.getFileHandle(filename);
+                    const file = await fh.getFile();
+                    const buf = await file.arrayBuffer();
+                    let rawBytesBuffer = buf;
+
+                    if (CryptoUtil.isEncryptedBinary(buf)) {
+                        sessionCryptoKey = oldKey;
+                        rawBytesBuffer = await CryptoUtil.decryptBinary(buf);
+                    }
+                    sessionCryptoKey = newKey;
+                    const newEncBuf = await CryptoUtil.encryptBinary(rawBytesBuffer);
+                    const writable = await fh.createWritable();
+                    await writable.write(newEncBuf);
+                    await writable.close();
+                } catch (e) {
+                    console.error("이미지 재암호화 건너뜀:", filename, e);
+                }
+            }
+        }
+
+        async function processImagesForRender() {
+            activeBlobUrls.forEach(url => URL.revokeObjectURL(url));
+            activeBlobUrls = [];
+
+            for (let item of appData.items) {
+                if (item.type === 'note' && item.content) {
+                    let tmp = document.createElement('div');
+                    tmp.innerHTML = item.content;
+                    let imgs = tmp.querySelectorAll('img[data-filename]');
+                    let changed = false;
+                    for (let img of imgs) {
+                        const filename = img.getAttribute('data-filename');
+                        try {
+                            const fh = await dirHandle.getFileHandle(filename);
+                            const file = await fh.getFile();
+                            const buf = await file.arrayBuffer();
+                            let plainBuffer = buf;
+
+                            if (CryptoUtil.isEncryptedBinary(buf)) {
+                                plainBuffer = await CryptoUtil.decryptBinary(buf);
+                            } else if (sessionCryptoKey) {
+                                const encBuf = await CryptoUtil.encryptBinary(buf);
+                                const writable = await fh.createWritable();
+                                await writable.write(encBuf);
+                                await writable.close();
+                            }
+
+                            const blob = new Blob([plainBuffer]);
+                            const blobUrl = URL.createObjectURL(blob);
+                            activeBlobUrls.push(blobUrl);
+                            img.setAttribute('src', blobUrl);
+                            changed = true;
+                        } catch (e) {
+                            console.error("이미지 파일을 읽거나 복호화할 수 없습니다:", filename);
+                        }
+                    }
+                    if (changed) { item.content = tmp.innerHTML; }
+                }
+            }
+        }
+
+        function save(immediate = false) {
+            if (!dirHandle || !sessionCryptoKey) return;
+            if (saveTimeout) clearTimeout(saveTimeout);
+            if (immediate) {
+                return flushSave();
+            }
+            saveTimeout = setTimeout(() => {
+                flushSave();
+            }, 250);
+        }
+
+        async function flushSave() {
+            if (!dirHandle || !sessionCryptoKey) return;
+            if (isSaving) {
+                savePending = true;
+                return;
+            }
+            isSaving = true;
+            try {
+                do {
+                    savePending = false;
+                    await performSaveToDisk();
+                } while (savePending);
+            } catch (e) {
+                console.error("데이터 저장 실패:", e);
+            } finally {
+                isSaving = false;
+            }
+        }
+
+        async function performSaveToDisk() {
+            let dataToSave = JSON.parse(JSON.stringify(appData));
+            dataToSave.items.forEach(item => {
+                delete item.targetX;
+                delete item.targetY;
+                if (item.type === 'note' && item.content) {
+                    let tmp = document.createElement('div');
+                    tmp.innerHTML = item.content;
+                    tmp.querySelectorAll('img[data-filename]').forEach(img => {
+                        img.setAttribute('src', '');
+                    });
+                    item.content = tmp.innerHTML;
+                }
+            });
+
+            const jsonString = JSON.stringify(dataToSave);
+            const encryptedObject = await CryptoUtil.encryptWithSessionKey(jsonString);
+
+            const fileHandle = await dirHandle.getFileHandle('data.json', { create: true });
+            const writable = await fileHandle.createWritable();
+            await writable.write(JSON.stringify(encryptedObject, null, 2));
+            await writable.close();
+        }
+
+        function deleteItemAndChildren(id) {
+            let idsToDelete = [id];
+            const getChildren = (parentId) => { appData.items.filter(i => i.parentId === parentId).forEach(child => { idsToDelete.push(child.id); getChildren(child.id); }); };
+            getChildren(id);
+            
+            idsToDelete.forEach(delId => {
+                let dItem = appData.items.find(i => i.id === delId);
+                if(dItem && dItem.type === 'note' && dItem.content) {
+                    let tmp = document.createElement('div');
+                    tmp.innerHTML = dItem.content;
+                    tmp.querySelectorAll('img[data-filename]').forEach(img => {
+                        const fname = img.getAttribute('data-filename');
+                        if (fname && dirHandle) dirHandle.removeEntry(fname).catch(e => {});
+                    });
+                }
+            });
+
+            appData.items = appData.items.filter(i => !idsToDelete.includes(i.id));
+            if (idsToDelete.includes(activeItemId)) activeItemId = null;
+            save(); render(); updateSearchWindow(); updateFavoriteWindow();
+        }
+
+        function initUI() {
+            const bgColor = appData.bgColor || '#1a1a1a';
+            document.getElementById('bg-color').value = bgColor;
+            appContainer.style.backgroundColor = bgColor;
+            document.documentElement.style.setProperty('--bg-color-val', bgColor);
+            
+            const hlColor = appData.searchHighlightColor || '#ffeb3b';
+            document.getElementById('search-color').value = hlColor;
+            document.documentElement.style.setProperty('--hl-color', hlColor);
+        }
+        
+        document.getElementById('bg-color').addEventListener('input', (e) => { 
+            appData.bgColor = e.target.value; 
+            appContainer.style.backgroundColor = appData.bgColor; 
+            document.documentElement.style.setProperty('--bg-color-val', appData.bgColor);
+            save(); 
+        });
+        document.getElementById('search-color').addEventListener('input', (e) => { 
+            appData.searchHighlightColor = e.target.value; 
+            document.documentElement.style.setProperty('--hl-color', appData.searchHighlightColor);
+            save(); render(); updateSearchWindow(); updateFavoriteWindow(); 
+        });
+        
+        const searchInput = document.getElementById('search-input');
+        const searchClear = document.getElementById('search-clear');
+        const searchWindow = document.getElementById('search-result-window');
+        const searchContent = document.getElementById('search-result-content');
+        const favoriteWindow = document.getElementById('favorite-window');
+        const favoriteContent = document.getElementById('favorite-content');
+
+        function updateSearchWindow() {
+            searchWindow.className = `state-${searchWindowState}`;
+            if (searchWindowState === 'hidden' || searchWindowState === 'collapsed') return;
+            searchContent.innerHTML = '';
+            if (searchQuery === '') return;
+
+            let matches = appData.items.filter(item => {
+                const plainText = stripHtml(item.content || '');
+                const tagText = (item.tags || []).join(' '); 
+                const titleText = item.title || '';
+                return `${plainText} ${tagText} ${titleText}`.toLowerCase().includes(searchQuery);
+            });
+
+            matches.forEach(item => {
+                let el = document.createElement('div'); el.className = `search-result-bubble type-${item.type}`;
+                el.style.backgroundColor = hexToRgba(item.color, item.opacity); el.style.border = `3px solid ${item.borderColor || '#ffffff'}`;
+                el.style.setProperty('--bg-color', hexToRgba(item.color, item.opacity)); el.style.setProperty('--border-color', item.borderColor || '#ffffff');
+                if (item.isSearchMatch) {
+                    el.classList.add('search-match'); el.style.setProperty('--search-color', appData.searchHighlightColor);
+                    if (item.type !== 'group') el.style.boxShadow = `0 0 0 5px ${appData.searchHighlightColor}, 0 10px 30px rgba(0,0,0,0.4)`; 
+                } else { if (item.type !== 'group') el.style.boxShadow = `0 10px 30px rgba(0,0,0,0.2)`; }
+
+                const plainTextTitle = stripHtml(item.content || ''); const displayTitle = item.type === 'group' ? item.title : (plainTextTitle.split('\n')[0] || '새 메모');
+                let clipHtml = (item.type === 'note' && item.content && item.content.includes('<img')) ? `<span class="clip-mark" style="opacity: 0.6;">📎</span>` : '';
+                const tagLabel = (item.tags && item.tags.length > 0) ? '#' + item.tags.join(' #') : (item.type === 'group' ? '그룹' : '일반');
+                const fColor = item.fontColor || '#333333';
+                el.innerHTML = `<div class="bubble-title" style="color: ${fColor}">${displayTitle}${clipHtml}</div><div class="bubble-meta">${tagLabel}</div>`;
+                el.onclick = (e) => { e.stopPropagation(); searchWindowState = 'collapsed'; updateSearchWindow(); activeItemId = item.id; currentParentId = item.parentId; item.lastModified = Date.now(); save(); render(); };
+                searchContent.appendChild(el);
+            });
+        }
+
+        function updateFavoriteWindow() {
+            favoriteWindow.className = `state-${favoriteWindowState}`;
+            if (favoriteWindowState === 'hidden' || favoriteWindowState === 'collapsed') return;
+            favoriteContent.innerHTML = '';
+
+            let favorites = appData.items.filter(item => item.isFavorite);
+            favorites.forEach(item => {
+                let el = document.createElement('div'); el.className = `search-result-bubble type-${item.type}`;
+                el.style.backgroundColor = hexToRgba(item.color, item.opacity); el.style.border = `3px solid ${item.borderColor || '#ffffff'}`;
+                el.style.setProperty('--bg-color', hexToRgba(item.color, item.opacity)); el.style.setProperty('--border-color', item.borderColor || '#ffffff');
+                if (item.type !== 'group') el.style.boxShadow = `0 10px 30px rgba(0,0,0,0.2)`;
+
+                const plainTextTitle = stripHtml(item.content || ''); const displayTitle = item.type === 'group' ? item.title : (plainTextTitle.split('\n')[0] || '새 메모');
+                let clipHtml = (item.type === 'note' && item.content && item.content.includes('<img')) ? `<span class="clip-mark" style="opacity: 0.6;">📎</span>` : '';
+                const tagLabel = (item.tags && item.tags.length > 0) ? '#' + item.tags.join(' #') : (item.type === 'group' ? '그룹' : '일반');
+                const fColor = item.fontColor || '#333333';
+                el.innerHTML = `<div class="bubble-title" style="color: ${fColor}">${displayTitle}${clipHtml}</div><div class="bubble-meta">${tagLabel}</div>`;
+                
+                el.onclick = (e) => { 
+                    e.stopPropagation(); favoriteWindowState = 'collapsed'; updateFavoriteWindow(); 
+                    activeItemId = item.id; currentParentId = item.parentId; item.lastModified = Date.now(); 
+                    save(); render(); 
+                };
+                favoriteContent.appendChild(el);
+            });
+        }
+
+        searchInput.addEventListener('input', (e) => { 
+            searchQuery = e.target.value.toLowerCase().trim(); 
+            searchClear.style.display = searchQuery !== '' ? 'block' : 'none'; 
+            if (searchQuery !== '') {
+                searchWindowState = 'expanded';
+                favoriteWindowState = 'collapsed';
+                updateFavoriteWindow();
+            } else {
+                searchWindowState = 'hidden';
+            }
+            updateSearchWindow(); 
+            render(); 
+        });
+        searchInput.addEventListener('focus', () => { 
+            if (searchQuery !== '') { 
+                searchWindowState = 'expanded'; 
+                favoriteWindowState = 'collapsed';
+                updateFavoriteWindow();
+                updateSearchWindow(); 
+            } 
+        });
+        searchClear.addEventListener('click', (e) => { e.stopPropagation(); searchInput.value = ''; searchQuery = ''; searchClear.style.display = 'none'; searchWindowState = 'hidden'; updateSearchWindow(); render(); });
+        
+        document.addEventListener('mousedown', (e) => { 
+            if (searchWindowState === 'expanded' && !e.target.closest('.search-wrapper') && !e.target.closest('#search-result-window')) { searchWindowState = 'collapsed'; updateSearchWindow(); }
+            if (favoriteWindowState === 'expanded' && !e.target.closest('#favorite-window')) { favoriteWindowState = 'collapsed'; updateFavoriteWindow(); }
+        });
+        document.addEventListener('touchstart', (e) => { 
+            if (searchWindowState === 'expanded' && !e.target.closest('.search-wrapper') && !e.target.closest('#search-result-window')) { searchWindowState = 'collapsed'; updateSearchWindow(); }
+            if (favoriteWindowState === 'expanded' && !e.target.closest('#favorite-window')) { favoriteWindowState = 'collapsed'; updateFavoriteWindow(); }
+        }, {passive: true});
+
+        searchWindow.addEventListener('mousedown', (e) => { 
+            if (searchWindowState === 'collapsed') { 
+                e.stopPropagation(); searchWindowState = 'expanded'; favoriteWindowState = 'collapsed';
+                activeItemId = null; currentParentId = null; updateFavoriteWindow(); updateSearchWindow(); save(); render(); 
+            } 
+        });
+        searchWindow.addEventListener('touchstart', (e) => { 
+            if (searchWindowState === 'collapsed') { 
+                e.stopPropagation(); e.preventDefault(); searchWindowState = 'expanded'; favoriteWindowState = 'collapsed';
+                activeItemId = null; currentParentId = null; updateFavoriteWindow(); updateSearchWindow(); save(); render(); 
+            } 
+        }, {passive: false});
+
+        favoriteWindow.addEventListener('mousedown', (e) => { 
+            if (favoriteWindowState === 'collapsed') { 
+                e.stopPropagation(); favoriteWindowState = 'expanded'; 
+                searchWindowState = searchQuery !== '' ? 'collapsed' : 'hidden';
+                activeItemId = null; currentParentId = null; updateSearchWindow(); updateFavoriteWindow(); save(); render(); 
+            } 
+        });
+        favoriteWindow.addEventListener('touchstart', (e) => { 
+            if (favoriteWindowState === 'collapsed') { 
+                e.stopPropagation(); e.preventDefault(); favoriteWindowState = 'expanded'; 
+                searchWindowState = searchQuery !== '' ? 'collapsed' : 'hidden';
+                activeItemId = null; currentParentId = null; updateSearchWindow(); updateFavoriteWindow(); save(); render(); 
+            } 
+        }, {passive: false});
+
+        let savedSelectionRange = null;
+        document.addEventListener('selectionchange', () => { let sel = window.getSelection(); if (sel.rangeCount > 0) { let node = sel.anchorNode; if (node && node.nodeType === 3) node = node.parentNode; if (node && node.closest && node.closest('.editor-textarea')) { savedSelectionRange = sel.getRangeAt(0); } } });
+
+        appContainer.addEventListener('dragover', e => { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; });
+        appContainer.addEventListener('drop', e => { 
+            e.preventDefault(); 
+            if (window.__dragHandled) return; 
+            if (window.__dragSource === 'tree' && window.__dragMode === 'group') { 
+                let draggedId = e.dataTransfer.getData('text/plain'); 
+                let dragged = appData.items.find(i => i.id === draggedId); 
+                if (dragged && dragged.parentId !== null) { dragged.parentId = null; dragged.lastModified = Date.now(); save(); render(); updateSearchWindow(); updateFavoriteWindow(); } 
+            } 
+            window.__dragSource = null; 
+        });
+
+        const imgResizer = document.getElementById('image-resizer-overlay');
+        const resizerHandle = document.getElementById('image-resizer-handle');
+        const resizerDelete = document.getElementById('image-resizer-delete');
+        let resizingImg = null;
+
+        function attachImageEvents(e) {
+            if (e.target.tagName === 'IMG' && e.target.closest('.editor-textarea')) { resizingImg = e.target; updateResizer(); } 
+            else if (e.target.id !== 'image-resizer-handle' && e.target.id !== 'image-resizer-delete') { imgResizer.style.display = 'none'; resizingImg = null; }
+        }
+        document.addEventListener('mousedown', attachImageEvents);
+        document.addEventListener('touchstart', attachImageEvents, {passive: true});
+
+        function updateResizer() {
+            if (!resizingImg) return;
+            const rect = resizingImg.getBoundingClientRect(); const containerRect = appContainer.getBoundingClientRect();
+            imgResizer.style.display = 'block'; imgResizer.style.left = (rect.left - containerRect.left) + 'px'; imgResizer.style.top = (rect.top - containerRect.top) + 'px'; imgResizer.style.width = rect.width + 'px'; imgResizer.style.height = rect.height + 'px';
+        }
+        document.addEventListener('scroll', updateResizer, true);
+
+        function handleImgResize(e) {
+            e.preventDefault(); e.stopPropagation(); if (!resizingImg) return;
+            let imgStartWidth = resizingImg.offsetWidth; 
+            let imgStartX = e.type.includes('touch') ? e.touches[0].clientX : e.clientX;
+            
+            function onMove(moveEvt) {
+                let currentX = moveEvt.type.includes('touch') ? moveEvt.touches[0].clientX : moveEvt.clientX;
+                const newWidth = Math.max(50, imgStartWidth + (currentX - imgStartX));
+                resizingImg.style.width = newWidth + 'px'; resizingImg.style.height = 'auto'; updateResizer();
+                if (activeItemId) { let actItem = appData.items.find(i => i.id === activeItemId); let editorArea = document.querySelector('.editor-textarea'); if(actItem && editorArea) actItem.content = editorArea.innerHTML; }
+            }
+            function onUp() { 
+                document.removeEventListener('mousemove', onMove); document.removeEventListener('mouseup', onUp); 
+                document.removeEventListener('touchmove', onMove); document.removeEventListener('touchend', onUp); save(); 
+            }
+            document.addEventListener('mousemove', onMove); document.addEventListener('mouseup', onUp);
+            document.addEventListener('touchmove', onMove, {passive: false}); document.addEventListener('touchend', onUp);
+        }
+        resizerHandle.addEventListener('mousedown', handleImgResize);
+        resizerHandle.addEventListener('touchstart', handleImgResize, {passive: false});
+
+        function handleImgDelete(e) {
+            e.preventDefault(); e.stopPropagation(); if (!resizingImg) return;
+            
+            const filename = resizingImg.getAttribute('data-filename');
+            if (filename && dirHandle) dirHandle.removeEntry(filename).catch(err => console.log("파일 삭제 실패:", err));
+            
+            resizingImg.remove(); imgResizer.style.display = 'none'; 
+            if (activeItemId) { let actItem = appData.items.find(i => i.id === activeItemId); let editorArea = document.querySelector('.editor-textarea'); if (actItem && editorArea) { actItem.content = editorArea.innerHTML; save(); renderTree(); updateSearchWindow(); updateFavoriteWindow(); } }
+            resizingImg = null;
+        }
+        resizerDelete.addEventListener('mousedown', handleImgDelete);
+        resizerDelete.addEventListener('touchstart', handleImgDelete, {passive: false});
+
+        function renderTree() {
+            const treeContainer = document.getElementById('tree-view'); 
+            treeContainer.innerHTML = '';
+            
+            function buildNode(parentId, domContainer) {
+                let children = appData.items.filter(i => i.parentId === parentId).sort((a, b) => a.order - b.order); 
+                if (children.length === 0) return;
+                let ul = document.createElement('ul');
+                
+                children.forEach(child => {
+                    let li = document.createElement('li'); 
+                    let content = document.createElement('div'); 
+                    content.className = 'tree-item'; 
+                    content.draggable = true;
+                    
+                    if (child.id === activeItemId) content.classList.add('tree-active');
+                    if (child.type === 'group') {
+                        let toggle = document.createElement('span'); 
+                        toggle.className = 'tree-toggle'; 
+                        toggle.textContent = child.expanded ? '-' : '+';
+                        toggle.onclick = (e) => { e.stopPropagation(); child.expanded = !child.expanded; save(); renderTree(); }; 
+                        content.appendChild(toggle);
+                    } else { 
+                        let spacer = document.createElement('span'); 
+                        spacer.className = 'tree-spacer'; 
+                        content.appendChild(spacer); 
+                    }
+
+                    let labelDiv = document.createElement('div'); 
+                    labelDiv.className = 'tree-label';
+                    const plainText = stripHtml(child.content || ''); 
+                    let titleText = child.type === 'group' ? child.title : (plainText.split('\n')[0] || '새 메모');
+                    let titleSpan = document.createElement('span'); 
+                    titleSpan.textContent = titleText; 
+                    labelDiv.appendChild(titleSpan);
+                    
+                    if (child.type === 'note' && child.content && child.content.includes('<img')) { 
+                        let clip = document.createElement('span'); 
+                        clip.className = 'clip-mark'; 
+                        clip.textContent = '📎'; 
+                        labelDiv.appendChild(clip); 
+                    }
+                    content.appendChild(labelDiv);
+                    
+                    let reorderBtn = document.createElement('span'); 
+                    reorderBtn.className = 'tree-reorder-btn'; 
+                    reorderBtn.textContent = '≡'; 
+                    reorderBtn.title = "드래그하여 상/하 순서 변경";
+                    content.appendChild(reorderBtn);
+
+                    let delBtn = document.createElement('span'); 
+                    delBtn.className = 'tree-delete-btn'; 
+                    delBtn.textContent = 'X';
+                    delBtn.onclick = (e) => { 
+                        e.stopPropagation(); 
+                        if (confirm(`'${titleText}' 삭제?`)) { deleteItemAndChildren(child.id); } 
+                    }; 
+                    content.appendChild(delBtn);
+
+                    content.addEventListener('mousedown', (e) => {
+                        window.__dragMode = e.target.closest('.tree-reorder-btn') ? 'reorder' : 'group';
+                    });
+                    content.addEventListener('touchstart', (e) => {
+                        window.__dragMode = e.target.closest('.tree-reorder-btn') ? 'reorder' : 'group';
+                    }, {passive: true});
+
+                    content.onclick = (e) => { 
+                        e.stopPropagation(); 
+                        activeItemId = child.id; 
+                        currentParentId = child.parentId; 
+                        child.lastModified = Date.now(); 
+                        save(); 
+                        render(); 
+                        if (isMobileEnv()) treeView.classList.remove('open'); 
+                    };
+
+                    content.addEventListener('dragstart', (e) => { 
+                        e.dataTransfer.setData('text/plain', child.id); 
+                        window.__dragStartX = e.clientX; 
+                        window.__dragStartY = e.clientY; 
+                        window.__draggedItem = child; 
+                        window.__dragHandled = false; 
+                        window.__isDetaching = false; 
+                        window.__isAttaching = false; 
+                        window.__dragSource = 'tree'; 
+                    });
+
+                    content.addEventListener('dragover', (e) => { 
+                        e.preventDefault(); 
+                        content.classList.remove('tree-drag-over', 'tree-reorder-top', 'tree-reorder-bottom');
+                        
+                        if (window.__dragMode === 'reorder') {
+                            if (window.__draggedItem && window.__draggedItem.parentId === child.parentId && window.__draggedItem.id !== child.id) {
+                                const rect = content.getBoundingClientRect();
+                                const isTopHalf = (e.clientY - rect.top) < (rect.height / 2);
+                                window.__reorderPosition = isTopHalf ? 'before' : 'after';
+                                content.classList.add(isTopHalf ? 'tree-reorder-top' : 'tree-reorder-bottom');
+                            }
+                        } else {
+                            content.classList.add('tree-drag-over'); 
+                        }
+                    });
+
+                    content.addEventListener('dragleave', () => { 
+                        content.classList.remove('tree-drag-over', 'tree-reorder-top', 'tree-reorder-bottom'); 
+                    });
+
+                    content.addEventListener('dragend', () => {
+                        window.__dragMode = 'group';
+                        window.__reorderPosition = null;
+                        document.querySelectorAll('.tree-item').forEach(el => {
+                            el.classList.remove('tree-drag-over', 'tree-reorder-top', 'tree-reorder-bottom');
+                        });
+                    });
+
+                    content.addEventListener('drop', (e) => { 
+                        e.preventDefault(); 
+                        content.classList.remove('tree-drag-over', 'tree-reorder-top', 'tree-reorder-bottom'); 
+                        window.__dragHandled = true; 
+                        let draggedId = e.dataTransfer.getData('text/plain');
+                        if (window.__dragMode === 'reorder') {
+                            handleReorderDrop(draggedId, child.id, window.__reorderPosition || 'before');
+                        } else {
+                            handleDrop(draggedId, child.id); 
+                        }
+                        window.__dragMode = 'group';
+                        window.__reorderPosition = null;
+                    });
+                    
+                    li.appendChild(content); 
+                    if (child.type === 'group' && child.expanded) { buildNode(child.id, li); } 
+                    ul.appendChild(li);
+                });
+                domContainer.appendChild(ul);
+            }
+            buildNode(null, treeContainer);
+        }
+
+        function calculateLayout() {
+            let activeGroup = null;
+            if (activeItemId) {
+                let actItem = appData.items.find(i => i.id === activeItemId);
+                activeGroup = (actItem && actItem.type === 'group') ? activeItemId : currentParentId;
+            } else {
+                activeGroup = currentParentId;
+            }
+            let isGroupActive = activeGroup !== null;
+
+            let renderItems = appData.items.filter(item => {
+                if (!isGroupActive) return item.parentId === null;
+                return item.id === activeGroup || item.parentId === activeGroup || item.parentId === null;
+            });
+            if (renderItems.length === 0) return [];
+
+            renderItems.forEach(item => {
+                item.isSearchMatch = false;
+                if (searchQuery !== '') {
+                    const plainText = stripHtml(item.content || '');
+                    const tagText = (item.tags || []).join(' ');
+                    const text = `${plainText} ${tagText} ${item.title || ''}`.toLowerCase();
+                    if (text.includes(searchQuery)) item.isSearchMatch = true;
+                }
+            });
+
+            let siblings = renderItems.filter(i => i.parentId === activeGroup);
+            siblings.sort((a, b) => a.order - b.order);
+            let centerItem = siblings[0] || renderItems.find(i => i.id === activeItemId);
+
+            const screenW = appContainer.clientWidth || window.innerWidth;
+            const screenH = appContainer.clientHeight || window.innerHeight;
+            const isMobile = isMobileEnv();
+
+            // 트리의 오른쪽 끝단(left: 30px + width: 280px = 310px) + 여백 20px = 330px
+            const treeRightEdge = 330;
+            const groupEditorCenterX = treeRightEdge + 550 / 2; // 605px (좌측 끝단 = 330px)
+            const noteEditorCenterX = treeRightEdge + 750 / 2;  // 705px (좌측 끝단 = 330px)
+            const groupEditorCenterY = 165;
+
+            const centerX = isMobile
+                ? screenW * 0.5
+                : (isGroupActive ? groupEditorCenterX : Math.max(groupEditorCenterX, (screenW + treeRightEdge) * 0.5));
+            const centerY = isMobile
+                ? (isGroupActive ? screenH * 0.64 : screenH * 0.5)
+                : (isGroupActive ? Math.max(380, screenH * 0.55) : screenH * 0.5);
+
+            renderItems.forEach(item => {
+                if (item.id === activeItemId) {
+                    if (item.type === 'group') {
+                        item.targetX = isMobile ? screenW * 0.5 : groupEditorCenterX;
+                        item.targetY = isMobile ? 165 : groupEditorCenterY;
+                    } else if (item.type === 'note') {
+                        item.targetX = isMobile ? screenW * 0.5 : noteEditorCenterX;
+                        item.targetY = screenH * 0.5;
+                    }
+                } else if (item === centerItem && searchQuery === '') {
+                    item.targetX = centerX;
+                    item.targetY = centerY;
+                } else {
+                    if (typeof item.targetX !== 'number' || isNaN(item.targetX) || typeof item.targetY !== 'number' || isNaN(item.targetY)) {
+                        item.targetX = centerX + (Math.random() - 0.5) * 50;
+                        item.targetY = centerY + (Math.random() - 0.5) * 50;
+                    }
+                }
+            });
+
+            const radius = isMobile ? 48 : 60;
+            const groupPushDist = isMobile ? 220 : 380;
+
+            for (let step = 0; step < 50; step++) {
+                for (let i = 0; i < renderItems.length; i++) {
+                    for (let j = i + 1; j < renderItems.length; j++) {
+                        let a = renderItems[i], b = renderItems[j];
+                        let aRadius = (a.id === activeItemId) ? (a.type === 'group' ? 110 : 300) : radius;
+                        let bRadius = (b.id === activeItemId) ? (b.type === 'group' ? 110 : 300) : radius;
+                        let dx = b.targetX - a.targetX;
+                        let dy = b.targetY - a.targetY;
+                        if (Math.abs(dx) < 0.1 && Math.abs(dy) < 0.1) { dx = (Math.random() - 0.5) * 20; dy = (Math.random() - 0.5) * 20; }
+                        let dist = Math.hypot(dx, dy);
+                        let minDist = aRadius + bRadius + (isMobile ? 12 : 20);
+                        if (dist < minDist) {
+                            let overlap = minDist - dist;
+                            let fx = (dx / dist) * overlap * 0.5;
+                            let fy = (dy / dist) * overlap * 0.5;
+                            let aFixed = (a.id === activeItemId) || (a === centerItem && searchQuery === '');
+                            let bFixed = (b.id === activeItemId) || (b === centerItem && searchQuery === '');
+                            if (!bFixed) { b.targetX += fx; b.targetY += fy; }
+                            if (!aFixed) { a.targetX -= fx; a.targetY -= fy; }
+                        }
+                    }
+                }
+                renderItems.forEach(item => {
+                    if (item.id === activeItemId) return;
+
+                    let isMember = item.parentId === activeGroup || item.id === activeGroup;
+                    if (!(item === centerItem && searchQuery === '')) {
+                        if (isGroupActive && !isMember) {
+                            let dxC = item.targetX - centerX;
+                            let dyC = item.targetY - centerY;
+                            let distC = Math.hypot(dxC, dyC) || 1;
+                            if (distC < groupPushDist) {
+                                item.targetX += (dxC / distC) * 5;
+                                item.targetY += (dyC / distC) * 5;
+                            } else {
+                                item.targetX -= (dxC / distC) * 0.5;
+                                item.targetY -= (dyC / distC) * 0.5;
+                            }
+                        } else {
+                            item.targetX += (centerX - item.targetX) * 0.05;
+                            item.targetY += (centerY - item.targetY) * 0.05;
+                        }
+                    }
+
+                    if (isMobile) {
+                        const padX = 54;
+                        const minY = isGroupActive ? 270 : 85;
+                        const maxY = screenH - 90;
+                        item.targetX = Math.max(padX, Math.min(screenW - padX, item.targetX));
+                        item.targetY = Math.max(minY, Math.min(maxY, item.targetY));
+                    } else {
+                        const minBubbleX = treeRightEdge + radius + 5;
+                        if (item.targetX < minBubbleX) item.targetX = minBubbleX;
+
+                        if (isGroupActive && activeItemId === activeGroup && isMember) {
+                            const minBubbleY = groupEditorCenterY + 155;
+                            if (item.targetY < minBubbleY) item.targetY = minBubbleY;
+                        }
+                    }
+                });
+            }
+            window.__activeGroupCenter = { x: centerX, y: centerY, id: activeGroup };
+            return renderItems;
+        }
+
+        function isDescendant(parentId, childId) {
+            if (parentId === childId) return true;
+            let child = appData.items.find(i => i.id === childId);
+            while (child && child.parentId) { if (child.parentId === parentId) return true; child = appData.items.find(i => i.id === child.parentId); }
+            return false;
+        }
+
+        function renderTags(el, item) {
+            let chipsContainer = el.querySelector('.chips-container');
+            if (chipsContainer) {
+                let chipsHtml = (item.tags || []).map((t, i) => `<span class="tag-chip">${t} <span class="tag-chip-del" data-idx="${i}">x</span></span>`).join('');
+                chipsContainer.innerHTML = chipsHtml;
+                chipsContainer.querySelectorAll('.tag-chip-del').forEach(btn => {
+                    btn.addEventListener('click', e => {
+                        e.stopPropagation(); let idx = parseInt(e.target.dataset.idx);
+                        item.tags.splice(idx, 1); save(); renderTags(el, item); renderTree(); updateSearchWindow(); updateFavoriteWindow();
+                    });
+                });
+            }
+        }
+
+        function render() {
+            imgResizer.style.display = 'none'; resizingImg = null;
+            let renderItems = calculateLayout() || []; let renderIds = renderItems.map(i => i.id);
+            let currentNodes = Array.from(container.children);
+            let isGroupActive = window.__activeGroupCenter && window.__activeGroupCenter.id !== null;
+
+            currentNodes.forEach(el => {
+                if (!renderIds.includes(el.dataset.id) && !el.classList.contains('animating-out')) {
+                    el.classList.add('animating-out');
+                    let item = appData.items.find(i => i.id === el.dataset.id);
+                    if (item && item.parentId) {
+                        let parent = appData.items.find(p => p.id === item.parentId);
+                        if (parent && parent.targetX) { el.style.left = `${parent.targetX}px`; el.style.top = `${parent.targetY}px`; }
+                    }
+                    setTimeout(() => el.remove(), 500); 
+                }
+            });
+
+            renderItems.forEach(item => {
+                let el = container.querySelector(`[data-id="${item.id}"]`);
+                const isEditor = item.id === activeItemId;
+                let isNew = false;
+
+                if (!el) {
+                    isNew = true; el = document.createElement('div'); el.dataset.id = item.id; el.className = `item-node animating-in type-${item.type}`;
+                    if (item.parentId) { let parent = appData.items.find(p => p.id === item.parentId); if (parent && parent.targetX) { el.style.left = `${parent.targetX}px`; el.style.top = `${parent.targetY}px`; }
+                    } else { el.style.left = `${appContainer.clientWidth/2}px`; el.style.top = `${appContainer.clientHeight/2}px`; }
+                    container.appendChild(el);
+
+                    el.addEventListener('click', (e) => { if (activeItemId !== item.id) { e.stopPropagation(); activeItemId = item.id; if (item.parentId) currentParentId = item.parentId; item.lastModified = Date.now(); save(); render(); } });
+                    
+                    el.addEventListener('dragstart', e => { 
+                        if (el.dataset.state === 'editor' && !e.target.closest('.editor-drag-handle')) { e.preventDefault(); return; }
+                        e.dataTransfer.setData('text/plain', item.id);
+                        
+                        let dragIcon = document.createElement('div'); dragIcon.style.width = item.type === 'group' ? '132px' : '120px'; dragIcon.style.height = item.type === 'group' ? '132px' : '120px'; dragIcon.style.background = hexToRgba(item.color, item.opacity); dragIcon.style.position = 'absolute'; dragIcon.style.top = '-1000px';
+                        if (item.type === 'group') { dragIcon.style.clipPath = 'polygon(29.3% 0%, 70.7% 0%, 100% 29.3%, 100% 70.7%, 70.7% 100%, 29.3% 100%, 0% 70.7%, 0% 29.3%)'; } 
+                        else { dragIcon.style.borderRadius = '50%'; dragIcon.style.border = `3px solid ${item.borderColor || '#ffffff'}`; }
+                        
+                        document.body.appendChild(dragIcon); e.dataTransfer.setDragImage(dragIcon, 60, 60); setTimeout(() => dragIcon.remove(), 0); 
+                        window.__dragStartX = e.clientX; window.__dragStartY = e.clientY; window.__draggedItem = item; window.__dragHandled = false; window.__isDetaching = false; window.__isAttaching = false; window.__dragSource = 'canvas'; 
+                        window.__dragMode = 'group'; 
+                    });
+                    
+                    el.addEventListener('drag', e => { 
+                        if (e.clientX === 0 && e.clientY === 0) return;
+                        processDragMove(e.clientX, e.clientY, item);
+                    });
+
+                    el.addEventListener('dragover', e => { e.preventDefault(); el.classList.add('drag-over'); });
+                    el.addEventListener('dragleave', e => { el.classList.remove('drag-over'); });
+                    el.addEventListener('drop', e => { e.preventDefault(); el.classList.remove('drag-over'); window.__dragHandled = true; handleDrop(e.dataTransfer.getData('text/plain'), item.id); });
+                    el.addEventListener('dragend', e => { processDragEnd(); });
+
+                    el.addEventListener('touchstart', e => {
+                        if (el.dataset.state === 'editor' && !e.target.closest('.editor-drag-handle')) return;
+                        const touch = e.touches[0];
+                        window.__dragStartX = touch.clientX; window.__dragStartY = touch.clientY; window.__draggedItem = item; window.__dragHandled = false; window.__isDetaching = false; window.__isAttaching = false; window.__dragSource = 'canvas';
+                    }, {passive: false});
+
+                    el.addEventListener('touchmove', e => {
+                        if (!window.__draggedItem || window.__draggedItem.id !== item.id) return;
+                        if (el.dataset.state !== 'editor' || e.target.closest('.editor-drag-handle')) { e.preventDefault(); }
+                        const touch = e.touches[0];
+                        let dist = Math.hypot(touch.clientX - window.__dragStartX, touch.clientY - window.__dragStartY);
+                        if (dist > 10 && el.dataset.state !== 'editor') {
+                            const rect = appContainer.getBoundingClientRect();
+                            el.style.transition = 'none';
+                            el.style.zIndex = 3000;
+                            el.style.left = (touch.clientX - rect.left) + 'px';
+                            el.style.top = (touch.clientY - rect.top) + 'px';
+                        }
+                        processDragMove(touch.clientX, touch.clientY, item);
+                    }, {passive: false});
+
+                    el.addEventListener('touchend', e => {
+                        if (!window.__draggedItem || window.__draggedItem.id !== item.id) return;
+                        const touch = e.changedTouches[0];
+                        el.style.transition = '';
+                        el.style.zIndex = '';
+                        document.getElementById('detach-tooltip').style.display = 'none'; document.getElementById('attach-tooltip').style.display = 'none';
+                        el.style.pointerEvents = 'none';
+                        let dropTargetEl = document.elementFromPoint(touch.clientX, touch.clientY);
+                        el.style.pointerEvents = '';
+                        let dropTargetNode = dropTargetEl ? dropTargetEl.closest('.item-node') : null;
+                        
+                        if (dropTargetNode && dropTargetNode.dataset.id !== item.id) { handleDrop(item.id, dropTargetNode.dataset.id); } 
+                        else { processDragEnd(); render(); }
+                    });
+                }
+
+                function processDragMove(clientX, clientY, dragItem) {
+                    let distFromOrigin = Math.hypot(clientX - window.__dragStartX, clientY - window.__dragStartY);
+                    if (distFromOrigin < 50) { document.getElementById('detach-tooltip').style.display = 'none'; document.getElementById('attach-tooltip').style.display = 'none'; window.__isDetaching = false; window.__isAttaching = false; return; }
+
+                    if (dragItem.parentId !== null && window.__dragStartX) {
+                        let dTooltip = document.getElementById('detach-tooltip');
+                        if (distFromOrigin > 150) { dTooltip.style.display = 'block'; dTooltip.style.left = clientX + 'px'; dTooltip.style.top = clientY + 'px'; window.__isDetaching = true; 
+                        } else { dTooltip.style.display = 'none'; window.__isDetaching = false; }
+                    }
+                    
+                    let isGrpAct = window.__activeGroupCenter && window.__activeGroupCenter.id !== null;
+                    if (isGrpAct && dragItem.parentId !== window.__activeGroupCenter.id && dragItem.id !== window.__activeGroupCenter.id) {
+                        let distToCenter = Math.hypot(clientX - window.__activeGroupCenter.x, clientY - window.__activeGroupCenter.y);
+                        let aTooltip = document.getElementById('attach-tooltip');
+                        if (distToCenter < 250) { aTooltip.style.display = 'block'; aTooltip.style.left = clientX + 'px'; aTooltip.style.top = clientY + 'px'; window.__isAttaching = true; document.getElementById('detach-tooltip').style.display = 'none'; window.__isDetaching = false;
+                        } else { aTooltip.style.display = 'none'; window.__isAttaching = false; }
+                    }
+                }
+
+                function processDragEnd() {
+                    document.getElementById('detach-tooltip').style.display = 'none'; document.getElementById('attach-tooltip').style.display = 'none';
+                    if (window.__isDetaching && !window.__dragHandled) { window.__draggedItem.parentId = null; window.__draggedItem.lastModified = Date.now(); save(); render(); updateSearchWindow(); updateFavoriteWindow();
+                    } else if (window.__isAttaching && !window.__dragHandled) { window.__draggedItem.parentId = window.__activeGroupCenter.id; window.__draggedItem.lastModified = Date.now(); save(); render(); updateSearchWindow(); updateFavoriteWindow(); }
+                    window.__isDetaching = false; window.__isAttaching = false; window.__dragStartX = null; window.__draggedItem = null; window.__dragSource = null;
+                }
+
+                const currentState = isEditor ? 'editor' : 'bubble';
+                el.className = `item-node ${currentState} type-${item.type}`;
+                
+                let isMember = item.parentId === window.__activeGroupCenter?.id || item.id === window.__activeGroupCenter?.id;
+                if (isGroupActive && !isMember && !isEditor) { el.classList.add('semi-transparent'); } else { el.classList.remove('semi-transparent'); }
+
+                el.style.backgroundColor = hexToRgba(item.color, item.opacity);
+                el.style.border = `3px solid ${item.borderColor || '#ffffff'}`;
+                el.style.setProperty('--bg-color', hexToRgba(item.color, item.opacity)); el.style.setProperty('--border-color', item.borderColor || '#ffffff');
+                
+                if (searchQuery !== '' && item.isSearchMatch) { 
+                    el.classList.add('search-match'); el.style.setProperty('--search-color', appData.searchHighlightColor);
+                    if (item.type !== 'group') el.style.boxShadow = `0 0 0 5px ${appData.searchHighlightColor}, 0 10px 30px rgba(0,0,0,0.4)`; 
+                } else { 
+                    el.classList.remove('search-match');
+                    if (item.type !== 'group') el.style.boxShadow = `0 10px 30px rgba(0,0,0,0.2)`; 
+                }
+
+                if (isNew) { el.getBoundingClientRect(); el.classList.remove('animating-in'); }
+                el.style.left = `${item.targetX}px`; el.style.top = `${item.targetY}px`;
+
+                const plainTextTitle = stripHtml(item.content || ''); const displayTitle = item.type === 'group' ? item.title : (plainTextTitle.split('\n')[0] || '새 메모');
+                let clipHtml = (item.type === 'note' && item.content && item.content.includes('<img')) ? `<span class="clip-mark" style="opacity: 0.6;">📎</span>` : '';
+
+                if (el.dataset.state !== currentState || isNew) {
+                    el.dataset.state = currentState;
+                    
+                    if (!isEditor) {
+                        el.draggable = true;
+                        const tagLabel = (item.tags && item.tags.length > 0) ? '#' + item.tags.join(' #') : (item.type === 'group' ? '그룹' : '일반');
+                        const fColor = item.fontColor || '#333333';
+                        el.innerHTML = `<div class="bubble-title" style="color: ${fColor}">${displayTitle}${clipHtml}</div><div class="bubble-meta">${tagLabel}</div>`;
+                    } else {
+                        el.draggable = false;
+                        el.innerHTML = `
+                            <div class="editor-ui">
+                                <div class="editor-drag-handle" draggable="true" title="상단을 드래그하여 이동/그룹화"><div class="drag-bar"></div></div>
+                                <button class="btn-minimize" title="편집 완료 (창 접기)">✓</button>
+                                <button class="btn-close" title="삭제">X</button>
+                                <div class="editor-controls">
+                                    <div class="tags-wrapper">
+                                        <div class="chips-container"></div>
+                                        <input type="text" class="tag-input" placeholder="태그 입력(Enter)">
+                                    </div>
+                                    ${item.type === 'note' ? 
+                                        `<label class="img-upload-label" for="img-upload-${item.id}">📷 첨부</label>
+                                         <input type="file" id="img-upload-${item.id}" style="display:none" accept="image/*">` : 
+                                        `<input type="text" class="title-input" value="${item.title}" placeholder="그룹명">`
+                                    }
+                                    <div class="appearance-controls">
+                                        바탕 <input type="color" class="color-picker item-color" value="${item.color}">
+                                        부분글자 <input type="color" class="color-picker text-color-picker" value="#333333" title="드래그한 텍스트의 색상을 변경합니다">
+                                        투명도 <input type="range" class="opacity-slider" min="0.1" max="1" step="0.1" value="${item.opacity}">
+                                        <button class="btn-favorite inline-fav ${item.isFavorite ? 'active' : ''}" title="즐겨찾기 토글">${item.isFavorite ? '★' : '☆'}</button>
+                                    </div>
+                                    ${item.type === 'group' ? `<button class="btn-parent">상위 그룹 생성</button>` : ''}
+                                </div>
+                                <div class="editor-body">
+                                    ${item.type === 'note' ? 
+                                        `<div class="editor-textarea" contenteditable="true" placeholder="메모를 입력하세요...">${item.content || ''}</div>` : 
+                                        ``
+                                    }
+                                </div>
+                            </div>
+                        `;
+
+                        renderTags(el, item);
+                        
+                        let favBtn = el.querySelector('.btn-favorite');
+                        if (favBtn) {
+                            favBtn.addEventListener('click', (e) => {
+                                e.stopPropagation();
+                                item.isFavorite = !item.isFavorite;
+                                if(item.isFavorite) {
+                                    favBtn.classList.add('active');
+                                    favBtn.textContent = '★';
+                                } else {
+                                    favBtn.classList.remove('active');
+                                    favBtn.textContent = '☆';
+                                }
+                                save(); 
+                                updateFavoriteWindow();
+                            });
+                        }
+
+                        el.querySelector('.tag-input').addEventListener('keydown', e => {
+                            if (e.isComposing || e.keyCode === 229) return; 
+                            if (e.key === 'Enter') {
+                                e.preventDefault(); let val = e.target.value.trim();
+                                if (val !== '') { if (!item.tags.includes(val)) item.tags.push(val); e.target.value = ''; save(); renderTags(el, item); renderTree(); updateSearchWindow(); updateFavoriteWindow(); }
+                            }
+                        });
+
+                        if (item.type === 'note') {
+                            const textarea = el.querySelector('.editor-textarea');
+                            textarea.addEventListener('input', e => { item.content = e.target.innerHTML; item.lastModified = Date.now(); save(); renderTree(); updateSearchWindow(); updateFavoriteWindow(); });
+                            
+                            let fileLabel = el.querySelector('.img-upload-label'); let fileInput = el.querySelector(`#img-upload-${item.id}`);
+                            fileLabel.addEventListener('click', e => e.stopPropagation()); fileInput.addEventListener('click', e => e.stopPropagation());
+
+                            fileInput.addEventListener('change', async (e) => {
+                                let file = e.target.files[0];
+                                if (file && dirHandle) {
+                                    const ext = file.name.split('.').pop() || 'png';
+                                    const filename = 'img_' + Date.now() + '.' + ext;
+                                    
+                                    try {
+                                        const rawBuffer = await file.arrayBuffer();
+                                        const encryptedBuffer = await CryptoUtil.encryptBinary(rawBuffer);
+
+                                        const fileHandle = await dirHandle.getFileHandle(filename, { create: true });
+                                        const writable = await fileHandle.createWritable();
+                                        await writable.write(encryptedBuffer);
+                                        await writable.close();
+                                        
+                                        const blobUrl = URL.createObjectURL(file);
+                                        activeBlobUrls.push(blobUrl);
+                                        let imgHtml = `<img src="${blobUrl}" data-filename="${filename}" style="width: 200px;" />`;
+                                        
+                                        textarea.focus(); let sel = window.getSelection();
+                                        if (sel.rangeCount > 0) {
+                                            let range = sel.getRangeAt(0);
+                                            if (textarea.contains(range.commonAncestorContainer)) {
+                                                let elNode = document.createElement('div'); elNode.innerHTML = imgHtml; let frag = document.createDocumentFragment(); let node, lastNode;
+                                                while ((node = elNode.firstChild)) { lastNode = frag.appendChild(node); }
+                                                range.insertNode(frag); if (lastNode) { range = range.cloneRange(); range.setStartAfter(lastNode); range.collapse(true); sel.removeAllRanges(); sel.addRange(range); }
+                                            } else { textarea.insertAdjacentHTML('beforeend', '<br/>' + imgHtml); }
+                                        } else { textarea.insertAdjacentHTML('beforeend', '<br/>' + imgHtml); }
+                                        
+                                        item.content = textarea.innerHTML; save(); render(); updateSearchWindow(); updateFavoriteWindow();
+                                    } catch(err) { alert("이미지 저장 실패. 권한을 확인해주세요."); }
+                                }
+                            });
+                        } else {
+                            el.querySelector('.title-input').addEventListener('input', e => { item.title = e.target.value; item.lastModified = Date.now(); save(); renderTree(); updateSearchWindow(); updateFavoriteWindow(); });
+                            if (el.querySelector('.btn-parent')) { el.querySelector('.btn-parent').addEventListener('click', (e) => { e.stopPropagation(); const newGroup = createItem('group', currentParentId); item.parentId = newGroup.id; activeItemId = newGroup.id; save(); render(); updateSearchWindow(); updateFavoriteWindow(); }); }
+                        }
+
+                        el.querySelector('.item-color').addEventListener('input', e => { 
+                            let newColor = e.target.value; item.color = newColor; el.style.backgroundColor = hexToRgba(newColor, item.opacity); el.style.setProperty('--bg-color', hexToRgba(newColor, item.opacity));
+                            if (item.type === 'group') {
+                                const syncBgColor = (parentId, color) => {
+                                    appData.items.filter(i => i.parentId === parentId).forEach(child => {
+                                        child.color = color; let childEl = container.querySelector(`[data-id="${child.id}"]`);
+                                        if(childEl) { childEl.style.backgroundColor = hexToRgba(color, child.opacity); childEl.style.setProperty('--bg-color', hexToRgba(color, child.opacity)); let picker = childEl.querySelector('.item-color'); if(picker) picker.value = color; }
+                                        syncBgColor(child.id, color);
+                                    });
+                                };
+                                syncBgColor(item.id, newColor);
+                            }
+                            save(); updateSearchWindow(); updateFavoriteWindow();
+                        });
+
+                        el.querySelector('.text-color-picker').addEventListener('input', e => { 
+                            if (item.type === 'note' && savedSelectionRange) {
+                                let sel = window.getSelection(); sel.removeAllRanges(); sel.addRange(savedSelectionRange);
+                                document.execCommand('styleWithCSS', false, true); document.execCommand('foreColor', false, e.target.value); 
+                                item.content = el.querySelector('.editor-textarea').innerHTML; save(); renderTree(); updateSearchWindow(); updateFavoriteWindow();
+                            }
+                        });
+                        el.querySelector('.opacity-slider').addEventListener('input', e => { item.opacity = parseFloat(e.target.value); el.style.backgroundColor = hexToRgba(item.color, item.opacity); el.style.setProperty('--bg-color', hexToRgba(item.color, item.opacity)); save(); });
+                        
+                        el.querySelector('.btn-minimize').addEventListener('click', (e) => {
+                            e.stopPropagation(); activeItemId = null; save(); render();
+                        });
+                        el.querySelector('.btn-close').addEventListener('click', (e) => {
+                            e.stopPropagation();
+                            if (!isMobileEnv() || confirm("이 항목을 삭제하시겠습니까?")) {
+                                deleteItemAndChildren(item.id);
+                            }
+                        });
+                    }
+                } else if (!isEditor) {
+                    const tagLabel = (item.tags && item.tags.length > 0) ? '#' + item.tags.join(' #') : (item.type === 'group' ? '그룹' : '일반');
+                    el.querySelector('.bubble-title').innerHTML = displayTitle + clipHtml;
+                    el.querySelector('.bubble-meta').textContent = tagLabel;
+                }
+            });
+
+            backdrop.className = (activeItemId || currentParentId) ? 'active' : '';
+            renderTree(); 
+        }
+
+        function createItem(type, parentId) {
+            const newItem = { id: generateId(), type: type, content: '', tags: [], title: '새 그룹', color: '#ffffff', borderColor: '#ffffff', opacity: 1.0, parentId: parentId, lastModified: Date.now(), expanded: true, order: Date.now(), isFavorite: false };
+            appData.items.push(newItem); return newItem;
+        }
+
+        function handleDrop(draggedId, targetId) {
+            if(draggedId === targetId) return; if(isDescendant(draggedId, targetId)) return;
+            let dragged = appData.items.find(i => i.id === draggedId); let target = appData.items.find(i => i.id === targetId);
+            if (!dragged || !target) return;
+            if (target.type === 'note' && dragged.type === 'note') {
+                const newGroup = createItem('group', target.parentId);
+                dragged.parentId = newGroup.id; target.parentId = newGroup.id; dragged.lastModified = Date.now(); target.lastModified = Date.now();
+            } else if (target.type === 'group') {
+                dragged.parentId = target.id; dragged.lastModified = Date.now(); target.lastModified = Date.now();
+            }
+            save(); render(); updateSearchWindow(); updateFavoriteWindow();
+        }
+
+        function handleReorderDrop(draggedId, targetId, position = 'before') {
+            if (draggedId === targetId) return;
+            let dragged = appData.items.find(i => i.id === draggedId);
+            let target = appData.items.find(i => i.id === targetId);
+            
+            if (!dragged || !target || dragged.parentId !== target.parentId) return;
+            
+            let siblings = appData.items.filter(i => i.parentId === dragged.parentId).sort((a, b) => a.order - b.order);
+            siblings = siblings.filter(i => i.id !== draggedId);
+            let targetIndex = siblings.findIndex(i => i.id === targetId);
+            
+            if (targetIndex !== -1) {
+                let insertIndex = (position === 'after') ? targetIndex + 1 : targetIndex;
+                siblings.splice(insertIndex, 0, dragged);
+            }
+            
+            siblings.forEach((item, index) => {
+                item.order = index;
+            });
+            
+            save(); renderTree(); render(); updateFavoriteWindow();
+        }
+
+        backdrop.addEventListener('click', () => {
+            if (activeItemId !== null) { activeItemId = null; } 
+            else if (currentParentId !== null) { let parentGroup = appData.items.find(i => i.id === currentParentId); currentParentId = parentGroup ? parentGroup.parentId : null; }
+            save(); render(); if (isMobileEnv()) treeView.classList.remove('open');
+        });
+
+        document.getElementById('btn-add-note').addEventListener('click', () => {
+            let parent = (activeItemId && appData.items.find(i=>i.id===activeItemId)?.type==='group') ? activeItemId : currentParentId;
+            const item = createItem('note', parent); activeItemId = item.id; currentParentId = parent; save(); render();
+        });
+
+        document.getElementById('btn-add-group').addEventListener('click', () => {
+            let parent = (activeItemId && appData.items.find(i=>i.id===activeItemId)?.type==='group') ? activeItemId : currentParentId;
+            const item = createItem('group', parent); activeItemId = item.id; currentParentId = parent; save(); render();
+        });
+
+        window.addEventListener('resize', render);
+
+        // 창 크기가 작을 때 입력 포커스로 인해 트리가 왼쪽 화면 밖으로 밀려나는 현상 원천 차단
+        appContainer.addEventListener('scroll', () => {
+            if (appContainer.scrollLeft !== 0) appContainer.scrollLeft = 0;
+            if (appContainer.scrollTop !== 0) appContainer.scrollTop = 0;
+        });
+    </script>
+</body>
+</html>
